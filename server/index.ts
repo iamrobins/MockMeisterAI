@@ -1,9 +1,15 @@
 import { resolve } from 'node:path';
 import express from 'express';
+import { createApp } from './app.ts';
 
 const port = Number(process.env.PORT ?? 3000);
 const production = process.argv[1]?.endsWith('.js');
-const app = express();
+const { app, close } = createApp({
+  apiKey: process.env.OPENAI_API_KEY ?? '',
+  model: process.env.REALTIME_MODEL ?? 'gpt-realtime-2.1-mini',
+  publicOrigin: process.env.PUBLIC_ORIGIN ?? `http://localhost:${port}`,
+  demoEnabled: process.env.DEMO_ENABLED === 'true',
+});
 
 let stopVite: (() => Promise<void>) | undefined;
 if (production) {
@@ -22,6 +28,7 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   server.close();
+  await close();
   await stopVite?.();
   server.closeAllConnections();
 }
