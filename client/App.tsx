@@ -1,6 +1,79 @@
+import { useEffect, useRef, useState } from 'react';
+import { createVoice } from './voice.ts';
+import type { Turn } from '../shared/voice.ts';
+
 export function App() {
+  const container = useRef<HTMLDivElement>(null);
+  const voice = useRef<ReturnType<typeof createVoice> | null>(null);
+  const [active, setActive] = useState(false);
+  const [status, setStatus] = useState('Ready when you are');
+  const [notice, setNotice] = useState('');
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [muted, setMuted] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => { clearInterval(timer); void voice.current?.end(); };
+  }, []);
+
+  function start() {
+    if (voice.current || !container.current) return;
+    setActive(true);
+    setMuted(false);
+    setBlocked(false);
+    setNotice('');
+    setTurns([]);
+    setDeadline(null);
+    try {
+      const call = createVoice(container.current, {
+        status: setStatus, turns: setTurns, deadline: setDeadline, notice: setNotice, blocked: setBlocked,
+        ended() { voice.current = null; setActive(false); setDeadline(null); setBlocked(false); },
+      });
+      voice.current = call;
+      void call.start();
+    } catch {
+      setNotice('This browser could not initialize audio. Try a current desktop browser on localhost or HTTPS.');
+      setActive(false);
+    }
+  }
+
+  const remaining = deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 600;
   return <main>
-    <h1>MockMeister</h1>
-    <p>Spoken system design interviews.</p>
+    <header>
+      <div><h1>MockMeister</h1><p>System design · URL shortener</p></div>
+      <div className="controls">
+        <span className="timer" aria-label="Time remaining">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</span>
+        {active ? <>
+          <button aria-pressed={muted} onClick={() => { voice.current?.mute(!muted); setMuted(!muted); }}>{muted ? 'Unmute' : 'Mute'}</button>
+          <button className="primary" onClick={() => { void voice.current?.end(); }}>End interview</button>
+        </> : <button className="primary" onClick={start}>Start interview</button>}
+      </div>
+    </header>
+    <section className="interview">
+      <div className="brief">
+        <p className="eyebrow">Your challenge</p>
+        <h2>Design a URL shortener.</h2>
+        <p>Talk through the requirements, data model, request flow, and how you would handle scale and failure.</p>
+        <p>Use headphones for the clearest conversation. You can interrupt the interviewer at any time.</p>
+        <p className="muted">Speech is processed by OpenAI. This development version keeps transcripts in memory only and does not record raw audio. Provider retention policies apply separately.</p>
+      </div>
+      <aside aria-label="Interviewer">
+        <div ref={container} className="avatar" aria-label="3D interviewer" />
+        <p role="status">{status}{muted && active ? ' · microphone muted' : ''}</p>
+        {blocked && <button onClick={() => { void voice.current?.resumeAudio(); }}>Enable sound</button>}
+      </aside>
+    </section>
+    {notice && <p className="notice" role="alert">{notice}</p>}
+    <section className="captions" aria-label="Interview captions">
+      <h2>Conversation</h2>
+      {!turns.length && <p className="muted">Your conversation will appear here.</p>}
+      <div aria-live="polite" aria-relevant="additions text">
+        {turns.map(turn => <p key={turn.itemId}><strong>{turn.role === 'candidate' ? 'You' : 'Interviewer'}</strong> {turn.text}{turn.interrupted && <span className="muted"> (interrupted)</span>}</p>)}
+      </div>
+    </section>
+    <footer><a href="/avatars/NOTICE.md" target="_blank" rel="noreferrer">Avatar credits</a></footer>
   </main>;
 }
