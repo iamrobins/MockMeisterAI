@@ -323,6 +323,7 @@ Each dimension appears once. Validate positive/negative assessment citations aga
 |---|---|
 | Microphone denied / autoplay blocked | Explain the browser issue and allow retry; stop partially acquired resources |
 | Avatar/model asset fails | Dispose broken renderer, attach the same audio to one plain audio element |
+| Plain audio playback fails | End the interview with a clear error; only autoplay denial offers an explicit Enable sound action |
 | Observer timeout | Ten-second request timeout, one transient retry if current; keep speaking |
 | Checkpoint timeout | Twenty-second timeout, one transient retry; keep recent transcript and prior memory |
 | Final evaluation timeout | Thirty-second timeout per attempt; one retry; show explicit unavailable result |
