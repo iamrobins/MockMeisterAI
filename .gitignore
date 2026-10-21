@@ -5,6 +5,7 @@ dist/
 !.env.example
 .npm-cache/
 .tmp/
+.certs/
 *.log
 HANDOFF.md
 skills/

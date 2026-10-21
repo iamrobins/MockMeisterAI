@@ -5,11 +5,11 @@ Real-audio acceptance remains pending until the checklist below is exercised.
 
 ## Automated checks
 
-- `npm test`: 15 passing tests for transcript/event deduplication, late ordering
+- `npm test`: 16 passing tests for transcript/event deduplication, late ordering
   links, interrupted output, server response scheduling, playback-vs-generation
   completion, session isolation, End/setup races, avatar attachment/disposal,
   a single audio downgrade, terminal audio failure, explicit autoplay recovery,
-  and GLB content.
+  GLB content, and rejection of partial TLS configuration.
 - `npm run typecheck`: passed against the installed SDK types.
 - `npm run build`: passed. Vite reports a large client chunk because it includes
   React, Three.js, and the avatar SDK; splitting has not been optimized.
@@ -20,6 +20,10 @@ Real-audio acceptance remains pending until the checklist below is exercised.
   disabling `DEMO_ENABLED` rejects session creation with 503. No provider calls
   were made during that smoke check.
 - Browser build scan: the configured API key is absent from all nine output files.
+- LAN HTTPS: the listener binds all interfaces when explicitly configured;
+  certificate verification, page/health/avatar requests, origin validation, and
+  anonymous session Start/End passed against the machine's LAN IP. This check
+  made no model calls and does not establish connectivity from the Mac.
 - Actual configured key: model lookup for `gpt-realtime-2.1-mini` succeeded.
   This does not establish Realtime session creation or audio quality.
 

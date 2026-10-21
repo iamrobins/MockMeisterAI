@@ -6,7 +6,7 @@ The first challenge is a ten-minute URL-shortener design discussion.
 Milestone 1 implements OpenAI Realtime WebRTC, server-side turn control,
 captions, a locally served Rocketbox avatar, audio fallback, and call cleanup.
 The whiteboard, PostgreSQL memory, and evidence-based feedback are planned
-in the next milestones. This development slice listens on loopback only.
+in the next milestones. This development slice listens on loopback by default.
 
 ## Run locally
 
@@ -42,10 +42,34 @@ npm start
 | `REALTIME_MODEL` | Defaults to `gpt-realtime-2.1-mini` |
 | `WORKER_MODEL` | `gpt-6-luna`, reserved for later observer/evaluator milestones |
 | `PORT` | Defaults to `3000` |
+| `HOST` | Bind address; defaults to `127.0.0.1`, use `0.0.0.0` for LAN testing |
 | `PUBLIC_ORIGIN` | Exact browser origin, normally `http://localhost:3000` |
+| `HTTPS_CERT_FILE`, `HTTPS_KEY_FILE` | Optional local certificate/key paths; supply both to enable HTTPS |
 | `DEMO_ENABLED` | Must be `true` to admit interviews |
 
 `.env` is ignored. Keep keys and session handles out of commits and screenshots.
+
+## Test from another device
+
+Microphone access over the LAN requires HTTPS and a certificate trusted by
+the other device. Plain HTTP at a LAN IP can display the page, but cannot
+run the interview microphone.
+
+Place a certificate covering your computer's LAN IP and its key in ignored
+`.certs/`, then set these values in `.env` using your actual IP:
+
+```text
+HOST=0.0.0.0
+PUBLIC_ORIGIN=https://192.168.1.4:3000
+HTTPS_CERT_FILE=.certs/lan-cert.pem
+HTTPS_KEY_FILE=.certs/lan-key.pem
+```
+
+Restart the server and open `PUBLIC_ORIGIN` on both devices. For a self-signed
+test certificate, import its **public certificate only** into Keychain Access
+on the Mac and trust it for SSL. Keep the private key on the server. Allow
+inbound TCP port 3000 from the local subnet if Windows Firewall blocks it.
+This is local testing, not a public deployment.
 
 ## Voice and resource ownership
 
