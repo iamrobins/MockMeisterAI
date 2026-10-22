@@ -20,6 +20,13 @@ test('each selected challenge supplies its own interviewer context', () => {
   assert.match(selected, /ingestion, indexing, retrieval/);
 });
 
+test('every challenge has the fixed opening after a natural greeting', () => {
+  for (const topic of ['url-shortener', 'whatsapp', 'chatgpt', 'claude-code', 'scalable-rag'] as const) {
+    assert.match(instructionsFor(getChallenge(topic)), /Start your first output with one short, natural greeting/);
+    assert.match(instructionsFor(getChallenge(topic)), /Let's design .+ today\. What requirements would you clarify first\?/);
+  }
+});
+
 test('interviewer supplies a simple baseline instead of making the candidate define scope', () => {
   const selected = instructionsFor(getChallenge('claude-code'));
   assert.match(selected, /state one simple, reasonable assumption appropriate to this challenge/);
