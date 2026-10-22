@@ -25,7 +25,7 @@ if (production) {
   stopVite = () => vite.close();
   app.use(vite.middlewares);
 }
-server.listen(port, '127.0.0.1', () => console.log(`MockMeister: ${publicOrigin}`));
+server.listen(port, '0.0.0.0', () => console.log(`MockMeister: ${publicOrigin}`));
 let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
