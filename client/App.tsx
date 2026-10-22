@@ -90,6 +90,7 @@ export function App() {
         <p role="status">{status}{muted && active ? ' · microphone muted' : ''}</p>
         {blocked && <button onClick={() => { void voice.current?.resumeAudio(); }}>Enable sound</button>}
       </section>
+      {boardStatus && <p className="muted" role="status">{boardStatus}</p>}
       {notice && <p className="notice" role="alert">{notice}</p>}
       <section className="captions" aria-label="Interview captions">
         <h2>Conversation</h2>
@@ -102,7 +103,7 @@ export function App() {
     </aside>
     <section className="board-workspace" aria-label="Whiteboard">
       {active && boardReady && session
-        ? <><Whiteboard sessionId={session.id} sessionHandle={session.handle} active={active} notice={setNotice} boardStatus={setBoardStatus} />{boardStatus && <p className="muted" role="status">{boardStatus}</p>}</>
+        ? <Whiteboard sessionId={session.id} sessionHandle={session.handle} active={active} notice={setNotice} boardStatus={setBoardStatus} />
         : <p className="muted">Start the interview to open the whiteboard.</p>}
     </section>
   </main>;

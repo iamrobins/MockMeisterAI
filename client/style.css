@@ -1,8 +1,8 @@
 :root { font-family: system-ui, sans-serif; color: #233044; background: #f6f7fa; line-height: 1.6; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-.app-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(300px, 30%) minmax(0, 70%); }
-.sidebar { min-height: 100vh; padding: 28px 24px; border-right: 1px solid #dce1e9; background: #f6f7fa; overflow-y: auto; }
+.app-shell { height: 100vh; display: grid; grid-template-columns: minmax(300px, 30%) minmax(0, 70%); overflow: hidden; }
+.sidebar { height: 100vh; min-height: 0; padding: 28px 24px; border-right: 1px solid #dce1e9; background: #f6f7fa; overflow-y: auto; }
 header { padding-bottom: 24px; border-bottom: 1px solid #dce1e9; }
 h1 { font-size: 1.5rem; margin: 0; letter-spacing: -.04em; }
 header p { margin: 2px 0 0; color: #607086; font-size: .9rem; }
@@ -23,16 +23,16 @@ button.primary:hover { background: #1c388b; }
 .interviewer p { font-size: .9rem; }
 .notice { background: #fff5d9; border: 1px solid #e2c37e; border-radius: 8px; padding: 12px 16px; }
 .captions { border-top: 1px solid #dce1e9; padding-top: 20px; margin-top: 24px; }
-.board-workspace { min-width: 0; padding: 24px; display: flex; flex-direction: column; background: white; }
-.board-workspace .whiteboard { flex: 1; min-height: 0; height: calc(100vh - 48px); margin: 0; border: 1px solid #dce1e9; border-radius: 12px; overflow: hidden; background: white; }
+.board-workspace { min-width: 0; height: 100vh; padding: 24px; display: flex; flex-direction: column; overflow: hidden; background: white; }
+.board-workspace .whiteboard { flex: 1; min-height: 0; height: 100%; margin: 0; border: 1px solid #dce1e9; border-radius: 12px; overflow: hidden; background: white; }
 .captions h2 { font-size: 1rem; }
 .captions p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .captions strong { margin-right: 8px; }
 footer { margin-top: 32px; font-size: .8rem; }
 a { color: #294cb2; }
 @media (max-width: 700px) {
-  .app-shell { grid-template-columns: 1fr; }
-  .sidebar { min-height: auto; border-right: 0; border-bottom: 1px solid #dce1e9; }
+  .app-shell { height: auto; grid-template-columns: 1fr; overflow: visible; }
+  .sidebar { height: auto; min-height: auto; border-right: 0; border-bottom: 1px solid #dce1e9; }
   .board-workspace { min-height: 70vh; padding: 16px; }
   .board-workspace .whiteboard { height: calc(70vh - 32px); }
   .brief h2 { font-size: 1.8rem; }
