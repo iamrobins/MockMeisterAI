@@ -26,7 +26,7 @@ export async function connectRealtime(offerSdp: string, options: ConnectOptions)
       model: options.model,
       instructions,
       output_modalities: ['audio'],
-      max_output_tokens: 1024,
+      max_output_tokens: 160,
       audio: {
         input: {
           noise_reduction: { type: 'near_field' },
