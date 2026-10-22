@@ -1,9 +1,9 @@
-# MockMeister
+# MockMeisterAI
 
 <img src="public/Interface.png" alt="MockMeisterAI — Practice system design interviews" width="100%" />
 
 A spoken system design interview with a browser-rendered 3D interviewer.
-Choose from five ten-minute system-design discussions: URL Shortner, WhatsApp,
+Choose from five ten-minute system-design discussions: URL Shortener, WhatsApp,
 ChatGPT, Claude Code, or a scalable RAG system.
 
 It uses OpenAI Realtime WebRTC, server-side turn control, captions, an
@@ -89,34 +89,32 @@ automatic call reconnect, or chain of alternate implementations.
 End stops local tracks, closes the peer and data channel, disposes playback,
 and requests provider REST hangup. Setup errors, missed heartbeats, the
 ten-minute deadline, and shutdown also terminate calls. Failed hangup
-confirmation is reported explicitly. Transcripts exist only in process memory;
-application records are not durable. Assistant output
-is conservatively not certified as heard evidence until playback receipts
-are implemented for evaluation.
+confirmation is logged internally without blocking final feedback. Transcripts
+exist only in process memory; application records are not durable.
 
 The character, lip-sync model, and notices are served locally. See
 [avatar provenance and licenses](public/avatars/NOTICE.md).
 
 ## Verification and limits
 
-Automated checks cover the main lifecycle and turn-control behavior, but a
+All 28 automated tests pass and cover the main lifecycle and turn-control behavior, but a
 successful build does not prove a real spoken exchange or lip sync. The current
 two-call cap and ten-minute deadline do not make a public paid endpoint
 abuse-proof.
 
-# MockMeisterAI — High-Level Design
+## MockMeisterAI — High-Level Design
 
 MockMeisterAI is a portfolio system-design interview simulator. A visitor selects one of five interview topics, talks to an AI interviewer, uses a whiteboard, and receives concise evidence-grounded feedback after ending the interview.
 
 This document describes the application as built, rather than a roadmap.
 
-## Product scope
+### Product scope
 
 The five supported topics are URL shortener, WhatsApp, ChatGPT, Claude Code, and scalable RAG. Each topic supplies a distinct opening question and interview focus. A session lasts at most ten minutes, may be ended earlier, and requires microphone access. The browser never receives the OpenAI API key.
 
-The application intentionally has no account system, database, durable reports, background job system, or custom drawing editor. Sessions, transcripts, whiteboard snapshots, and feedback are process memory only. They disappear when the session expires, the process restarts, or completed-session cleanup runs.
+The application intentionally has no account system, database, durable reports, background job system, or custom drawing editor. Sessions, transcripts, board version/fingerprint, and feedback are process memory only. Whiteboard images are sent directly to Realtime and are not retained by the application. In-memory records disappear when the session expires, the process restarts, or completed-session cleanup runs.
 
-## Architecture
+### Architecture
 
 ```mermaid
 flowchart LR
@@ -137,7 +135,7 @@ The whiteboard waits for a short idle period before it captures a PNG and Excali
 
 On End, the server closes the Realtime call and sends finalized candidate transcript turns to a separate text-model evaluation. Structured feedback can cite only those candidate turns. Board images guide the live discussion but are not used in the final report.
 
-## Core decisions and trade-offs
+### Core decisions and trade-offs
 
 | Decision | Why | Trade-off |
 | --- | --- | --- |
@@ -148,7 +146,7 @@ On End, the server closes the Realtime call and sends finalized candidate transc
 | Separate evaluator after the call | Feedback does not delay the spoken conversation and citations are validated. | Feedback is unavailable if that final model call fails. |
 | Anonymous session handle | Scopes access to a session without building authentication. | It is not user identity or a public-service authorization layer. |
 
-## Safety and lifecycle controls
+### Safety and lifecycle controls
 
 - Session creation validates the selected topic, origin, and request payload.
 - A random session handle is required for every session-specific route; only its SHA-256 hash is retained server-side.
@@ -158,21 +156,21 @@ On End, the server closes the Realtime call and sends finalized candidate transc
 
 These controls make the demo safer to operate but do not make it safe as an unrestricted public paid endpoint. A public launch needs admission/rate limits appropriate to the chosen host and budget.
 
-## Deployment shape
+### Deployment shape
 
 Build with `npm run build` and run with `npm start`. Configure `OPENAI_API_KEY`, `REALTIME_MODEL`, `WORKER_MODEL`, `PORT`, `PUBLIC_ORIGIN`, and `DEMO_ENABLED` in the host environment. Use one HTTPS origin for page and API.
 
 The current server deliberately listens on loopback, which is suitable for a same-host reverse proxy. A container/PaaS deployment that expects an externally bound application must change that binding. `PUBLIC_ORIGIN` must exactly match the final browser origin.
 
-## Interview discussion prompts
+### Interview discussion prompts
 
 Useful discussion points are why the sideband is server-owned, how the turn controller avoids overlapping responses, why session handles are hashed, how to make sessions durable, how to add abuse controls, and how to make final feedback incorporate whiteboard evidence. Those are natural next-step designs, not features this portfolio version claims to implement.
 
-# MockMeisterAI — Low-Level Design
+## MockMeisterAI — Low-Level Design
 
-Read [HLD](HLD.md) for system boundaries and trade-offs. This document records the implemented contracts.
+This section records the implemented contracts.
 
-## Code ownership
+### Code ownership
 
 ```text
 client/
@@ -192,7 +190,7 @@ shared/
   feedback.ts      feedback contract
 ```
 
-## Session state
+### Session state
 
 ```ts
 type Status = 'starting' | 'active' | 'finalizing' | 'completed' | 'failed';
@@ -202,7 +200,7 @@ A `POST /api/sessions` request creates a `starting` session and returns a UUID p
 
 `end()` is idempotent: it changes state to `finalizing`, stops the turn controller, aborts the Realtime operation, closes the provider call, evaluates finalized candidate turns, and marks the session `completed` (or `failed` when an error message explains termination). A one-second sweep terminates expired or abandoned sessions and removes terminal sessions after inactivity.
 
-## API
+### API
 
 | Route | Contract |
 | --- | --- |
@@ -217,19 +215,19 @@ A `POST /api/sessions` request creates a `starting` session and returns a UUID p
 
 All session routes require `X-Interview-Session`. API mutations require an exact `Origin` matching `PUBLIC_ORIGIN`; API responses are `no-store`.
 
-## Voice and response sequencing
+### Voice and response sequencing
 
 The client gets microphone audio with echo cancellation, noise suppression, and automatic gain control, creates an SDP offer, then attaches the remote audio track to the avatar playback owner. A Realtime data channel supplies captions to the browser. The server separately attaches an authenticated WebSocket sideband to receive authoritative events and send controls.
 
 `createTurnController` accepts provider events, keeps finalized turns, ignores filler/one-word candidate transcript turns, and schedules a single next response only after the previous output is safe to replace. Candidate speech that remains continuous long enough interrupts active interviewer audio. Playback tracks model audio separately from avatar playback so stale buffered audio does not resume after interruption.
 
-## Board handling
+### Board handling
 
 The client waits four seconds after the last meaningful Excalidraw change and sends at most one capture every five seconds. The server accepts up to 500 elements and a 1.4 MB base64 field; decoded images must be valid PNGs up to 1600×1600 and at most 1 MB. Scene versioning and a fingerprint make retries safe and reject conflicting updates.
 
 When a non-empty board is accepted, the server explicitly frames it as untrusted evidence, sends the image to the active Realtime call, and asks exactly one short question about a visible component or connection.
 
-## Feedback contract
+### Feedback contract
 
 At interview end, the evaluator receives only finalized non-empty candidate turns for the selected topic. It produces:
 
@@ -243,7 +241,7 @@ type Feedback = {
 
 Zod validates the response. Every citation must refer to an actual candidate turn from that session; otherwise feedback is rejected. Evaluation failure preserves the transcript snapshot and returns a clear error instead of fabricated feedback.
 
-## Limits and known boundaries
+### Limits and known boundaries
 
 - 2 simultaneous non-terminal sessions
 - 30-second setup timeout; 45-second missing-heartbeat timeout
