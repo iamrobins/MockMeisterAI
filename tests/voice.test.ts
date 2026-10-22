@@ -45,6 +45,7 @@ test('server greets once, waits for commit and playback, and coalesces resumed s
   await new Promise(resolve => setTimeout(resolve, 2_050));
   voice.accept(event('input_audio_buffer.speech_stopped'));
   voice.accept(event('input_audio_buffer.committed', { item_id: 'answer_1' }));
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'answer_1', transcript: 'Use a cache.' }));
   assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
   voice.accept(response('response.created', 'reply_1'));
   voice.accept(event('input_audio_buffer.speech_started'));
@@ -53,7 +54,9 @@ test('server greets once, waits for commit and playback, and coalesces resumed s
   assert.ok(sent.some(e => e.type === 'output_audio_buffer.clear'));
   voice.accept(response('response.done', 'reply_1', 'cancelled'));
   voice.accept(event('input_audio_buffer.committed', { item_id: 'answer_2' }));
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'answer_2', transcript: 'Use a cache.' }));
   voice.accept(event('input_audio_buffer.committed', { item_id: 'answer_3' }));
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'answer_3', transcript: 'Use a database.' }));
   assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
   voice.accept(event('input_audio_buffer.speech_stopped'));
   assert.equal(sent.filter(e => e.type === 'response.create').length, 3);
@@ -66,6 +69,7 @@ test('generation completion does not release a response before playback finishes
   voice.accept(response('response.created', 'greeting'));
   voice.accept(response('response.done', 'greeting'));
   voice.accept(event('input_audio_buffer.committed', { item_id: 'answer_1' }));
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'answer_1', transcript: 'Use a cache.' }));
   assert.equal(sent.length, 1);
   voice.accept(event('output_audio_buffer.started', { response_id: 'greeting' }));
   assert.equal(sent.length, 1);
@@ -87,14 +91,23 @@ test('a prompted request speaks once the current audio is finished with its own 
   assert.deepEqual(sent.at(-1), { type: 'response.create', response: { instructions: 'Ask about the cache.' } });
 });
 
-test('a duplicate commit does not request a second response after playback', () => {
+test('only a substantive finalized candidate transcript requests a response', () => {
   const sent: RealtimeClientEvent[] = [];
   const voice = createTurnController(e => sent.push(e));
   voice.start();
   voice.accept(response('response.done', 'greeting', 'cancelled'));
   voice.accept(event('input_audio_buffer.committed', { item_id: 'answer_1' }));
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'answer_1', transcript: 'Use a cache.' }));
   voice.accept(response('response.done', 'reply_1', 'cancelled'));
-  voice.accept(event('input_audio_buffer.committed', { item_id: 'answer_1' }));
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'answer_1', transcript: 'duplicate' }));
+  assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'empty_1', transcript: '   ' }));
+  assert.equal(voice.log.turns.has('empty_1'), false);
+  assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'filler_1', transcript: 'um okay' }));
+  voice.accept(event('conversation.item.input_audio_transcription.completed', { item_id: 'one_word_1', transcript: 'cache' }));
+  assert.equal(voice.log.turns.has('filler_1'), false);
+  assert.equal(voice.log.turns.has('one_word_1'), false);
   assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
   voice.stop(); voice.stop();
   const count = sent.length;

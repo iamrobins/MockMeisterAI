@@ -144,7 +144,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
     window.addEventListener('pagehide', leave);
     try {
       callbacks.status('Allow microphone access…');
-      const captured = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+      const captured = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
       if (closed) { captured.getTracks().forEach(track => track.stop()); return; }
       mic = captured;
       await playback.ready;

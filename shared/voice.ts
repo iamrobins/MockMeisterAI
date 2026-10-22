@@ -1,5 +1,11 @@
 import type { RealtimeServerEvent, RealtimeClientEvent } from 'openai/resources/realtime/realtime';
 
+const fillers = new Set(['ah', 'ahh', 'uh', 'uhh', 'um', 'umm', 'okay', 'ok', 'hmm', 'huh']);
+function isSubstantiveTranscript(text: string) {
+  const words = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  return words.length > 1 && words.some(word => !fillers.has(word));
+}
+
 export type Turn = {
   itemId: string;
   previousItemId?: string | null;
@@ -60,6 +66,16 @@ export function createTurnLog() {
           activeResponse = undefined;
           break;
         case 'conversation.item.input_audio_transcription.completed':
+          if (!isSubstantiveTranscript(event.transcript) || turns.has(event.item_id)) break;
+          turns.set(event.item_id, {
+            itemId: event.item_id,
+            previousItemId: previous.get(event.item_id),
+            role: 'candidate',
+            text: event.transcript,
+            interrupted: false,
+            heard: true,
+          });
+          break;
         case 'response.output_audio_transcript.done': {
           if (turns.has(event.item_id)) break;
           const responseId = event.type === 'response.output_audio_transcript.done' ? event.response_id : undefined;
@@ -159,8 +175,8 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
           clearTimeout(interruptTimer);
           interruptTimer = undefined;
           break;
-        case 'input_audio_buffer.committed':
-          if (committed.has(event.item_id)) break;
+        case 'conversation.item.input_audio_transcription.completed':
+          if (!isSubstantiveTranscript(event.transcript) || committed.has(event.item_id)) break;
           committed.add(event.item_id);
           pending = true;
           pendingInstructions = undefined;

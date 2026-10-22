@@ -85,7 +85,7 @@ export function App() {
           {(['strengths', 'improvements'] as const).map(kind => <div key={kind}>
             <h3>{kind === 'strengths' ? 'Strengths' : 'Improve next'}</h3>
             {!feedback[kind].length && <p className="muted">No clear evidence.</p>}
-            <ul>{feedback[kind].map((finding, index) => <li key={index}>{finding.text} {finding.citations.map(id => <a key={id} href={`#turn-${id}`}>[{id}]</a>)}</li>)}</ul>
+            <ul>{feedback[kind].map((finding, index) => <li key={index}>{finding.text} {finding.citations.map((id, citationIndex) => <a key={id} href={`#turn-${id}`} aria-label={`View supporting transcript ${citationIndex + 1}`}>[Evidence {citationIndex + 1}]</a>)}</li>)}</ul>
           </div>)}
           {!!feedback.limitations.length && <div><h3>Limitations</h3><ul>{feedback.limitations.map((limitation, index) => <li key={index}>{limitation}</li>)}</ul></div>}
         </section>}

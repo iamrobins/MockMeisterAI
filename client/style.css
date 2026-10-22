@@ -31,6 +31,7 @@ button.primary:hover { background: #1c388b; }
 .feedback ul { margin: 4px 0; padding-left: 20px; }
 .feedback a { margin-left: 4px; font-size: .8rem; }
 .captions p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.captions p:target { background: #fff5d9; border-left: 3px solid #d28a00; border-radius: 4px; padding: 4px 8px; }
 .captions strong { margin-right: 8px; }
 footer { margin-top: 32px; font-size: .8rem; }
 a { color: #294cb2; }
