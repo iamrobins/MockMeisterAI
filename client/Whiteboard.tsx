@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 
-type Props = { sessionId?: string; sessionHandle?: string; active: boolean; notice: (message: string) => void };
+type Props = { sessionId?: string; sessionHandle?: string; active: boolean; notice: (message: string) => void; boardStatus: (message: string) => void };
 
-export function Whiteboard({ sessionId, sessionHandle, active, notice }: Props) {
+export function Whiteboard({ sessionId, sessionHandle, active, notice, boardStatus }: Props) {
   const latest = useRef<readonly unknown[]>([]); const signature = useRef(''); const version = useRef(0); const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); const lastSent = useRef(0); const capturing = useRef(false);
   useEffect(() => () => clearTimeout(timer.current), []);
   function queueCapture() {
@@ -21,6 +21,7 @@ export function Whiteboard({ sessionId, sessionHandle, active, notice }: Props) 
       const pngBase64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(reader.error); reader.onload = () => resolve(String(reader.result).split(',', 2)[1]); reader.readAsDataURL(blob); });
       const response = await fetch(`/api/sessions/${sessionId}/board`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Interview-Session': sessionHandle }, body: JSON.stringify({ version: ++version.current, capturedAt: new Date().toISOString(), elements, pngBase64 }) });
       if (!response.ok) notice('The latest drawing was not saved for this interview.');
+      else boardStatus('Checking board…');
       lastSent.current = Date.now();
     } finally {
       capturing.current = false;

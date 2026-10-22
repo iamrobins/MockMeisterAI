@@ -16,11 +16,28 @@ export function App() {
   const [now, setNow] = useState(Date.now());
   const [session, setSession] = useState<{ id: string; handle: string }>();
   const [boardReady, setBoardReady] = useState(false);
+  const [boardStatus, setBoardStatus] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearInterval(timer); void voice.current?.end(); };
   }, []);
+  useEffect(() => {
+    if (boardStatus !== 'Checking board…' || !session) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/sessions/${session.id}`, { headers: { 'X-Interview-Session': session.handle } });
+        const snapshot = await response.json();
+        if (cancelled) return;
+        if (snapshot.diagramStatus === 'ready') setBoardStatus('Board checked');
+        else if (snapshot.diagramStatus === 'failed') setBoardStatus('Board check failed');
+      } catch { /* A later board change or interview end clears this status. */ }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 1_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [boardStatus, session]);
 
   function start() {
     if (voice.current || !container.current) return;
@@ -32,10 +49,11 @@ export function App() {
     setDeadline(null);
     setSession(undefined);
     setBoardReady(false);
+    setBoardStatus('');
     try {
       const call = createVoice(container.current, {
         status: setStatus, turns: setTurns, deadline: setDeadline, notice: setNotice, blocked: setBlocked,
-        ended() { voice.current = null; setActive(false); setDeadline(null); setBlocked(false); setBoardReady(false); },
+        ended() { voice.current = null; setActive(false); setDeadline(null); setBlocked(false); setBoardReady(false); setBoardStatus(''); },
         session(id, handle) { setSession({ id, handle }); },
         ready() { setBoardReady(true); },
       });
@@ -48,40 +66,44 @@ export function App() {
   }
 
   const remaining = deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 600;
-  return <main>
-    <header>
-      <div><h1>MockMeister</h1><p>System design · URL shortener</p></div>
-      <div className="controls">
-        <span className="timer" aria-label="Time remaining">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</span>
-        {active ? <>
-          <button aria-pressed={muted} onClick={() => { voice.current?.mute(!muted); setMuted(!muted); }}>{muted ? 'Unmute' : 'Mute'}</button>
-          <button className="primary" onClick={() => { void voice.current?.end(); }}>End interview</button>
-        </> : <button className="primary" onClick={start}>Start interview</button>}
-      </div>
-    </header>
-    <section className={active ? 'interview active-interview' : 'interview'}>
-      <div className="brief">
+  return <main className="app-shell">
+    <aside className="sidebar">
+      <header>
+        <div><h1>MockMeister</h1><p>System design · URL shortener</p></div>
+        <div className="controls">
+          <span className="timer" aria-label="Time remaining">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</span>
+          {active ? <>
+            <button aria-pressed={muted} onClick={() => { voice.current?.mute(!muted); setMuted(!muted); }}>{muted ? 'Unmute' : 'Mute'}</button>
+            <button className="primary" onClick={() => { void voice.current?.end(); }}>End interview</button>
+          </> : <button className="primary" onClick={start}>Start interview</button>}
+        </div>
+      </header>
+      <section className="brief">
         <p className="eyebrow">Your challenge</p>
         <h2>Design a URL shortener.</h2>
         <p>Talk through the requirements, data model, request flow, and how you would handle scale and failure.</p>
         <p>Use headphones for the clearest conversation. You can interrupt the interviewer at any time.</p>
         <p className="muted">Speech and drawings are processed for this interview and held only in memory while it is active. Raw audio is not recorded. Provider retention policies apply separately.</p>
-      </div>
-      <aside aria-label="Interviewer">
+      </section>
+      <section className="interviewer" aria-label="Interviewer">
         <div ref={container} className="avatar" aria-label="3D interviewer" />
         <p role="status">{status}{muted && active ? ' · microphone muted' : ''}</p>
         {blocked && <button onClick={() => { void voice.current?.resumeAudio(); }}>Enable sound</button>}
-      </aside>
+      </section>
+      {notice && <p className="notice" role="alert">{notice}</p>}
+      <section className="captions" aria-label="Interview captions">
+        <h2>Conversation</h2>
+        {!turns.length && <p className="muted">Your conversation will appear here.</p>}
+        <div aria-live="polite" aria-relevant="additions text">
+          {turns.map(turn => <p key={turn.itemId}><strong>{turn.role === 'candidate' ? 'You' : 'Interviewer'}</strong> {turn.text}{turn.interrupted && <span className="muted"> (interrupted)</span>}</p>)}
+        </div>
+      </section>
+      <footer><a href="/avatars/NOTICE.md" target="_blank" rel="noreferrer">Avatar credits</a></footer>
+    </aside>
+    <section className="board-workspace" aria-label="Whiteboard">
+      {active && boardReady && session
+        ? <><Whiteboard sessionId={session.id} sessionHandle={session.handle} active={active} notice={setNotice} boardStatus={setBoardStatus} />{boardStatus && <p className="muted" role="status">{boardStatus}</p>}</>
+        : <p className="muted">Start the interview to open the whiteboard.</p>}
     </section>
-    {active && boardReady && session && <Whiteboard sessionId={session.id} sessionHandle={session.handle} active={active} notice={setNotice} />}
-    {notice && <p className="notice" role="alert">{notice}</p>}
-    <section className="captions" aria-label="Interview captions">
-      <h2>Conversation</h2>
-      {!turns.length && <p className="muted">Your conversation will appear here.</p>}
-      <div aria-live="polite" aria-relevant="additions text">
-        {turns.map(turn => <p key={turn.itemId}><strong>{turn.role === 'candidate' ? 'You' : 'Interviewer'}</strong> {turn.text}{turn.interrupted && <span className="muted"> (interrupted)</span>}</p>)}
-      </div>
-    </section>
-    <footer><a href="/avatars/NOTICE.md" target="_blank" rel="noreferrer">Avatar credits</a></footer>
   </main>;
 }

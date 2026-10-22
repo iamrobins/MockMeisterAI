@@ -27,6 +27,7 @@ type Session = {
   boardVersion: number;
   boards: Map<number, { fingerprint: string; snapshot: BoardSnapshot }>;
   diagram?: Observation;
+  diagramStatus: 'idle' | 'checking' | 'ready' | 'failed';
   observing: boolean;
   pendingBoard?: BoardSnapshot;
 };
@@ -54,7 +55,7 @@ export function createApp(config: Config, connect = connectRealtime) {
 
   function snapshot(session: Session) {
     return { status: session.status, deadlineAt: session.deadlineAt,
-      turns: [...session.controller.log.turns.values()], error: session.error, diagramVersion: session.boardVersion, diagram: session.diagram };
+      turns: [...session.controller.log.turns.values()], error: session.error, diagramVersion: session.boardVersion, diagram: session.diagram, diagramStatus: session.diagramStatus };
   }
 
   function find(req: Request, res: Response) {
@@ -103,12 +104,20 @@ export function createApp(config: Config, connect = connectRealtime) {
       const result: Observation = visible.length
         ? { ...await observer(snapshot, session.abort.signal), snapshotVersion: snapshot.version, observedAt: new Date().toISOString() }
         : { snapshotVersion: snapshot.version, observedAt: new Date().toISOString(), nodes: [], edges: [], changes: ['The board is blank.'], uncertainties: [] };
-      if (session.status === 'active' && session.boardVersion === snapshot.version && validObservation(result, snapshot)) {
-        session.diagram = result;
-        updateInterviewer(session);
+      if (session.status === 'active' && session.boardVersion === snapshot.version) {
+        if (validObservation(result, snapshot)) {
+          session.diagram = result;
+          session.diagramStatus = 'ready';
+          updateInterviewer(session);
+        } else {
+          session.diagramStatus = 'failed';
+        }
       }
     } catch (error) {
-      if (!session.abort.signal.aborted) console.error(JSON.stringify({ sessionId: session.id, event: 'board.observer_failed', code: error instanceof Error ? error.name : 'unknown' }));
+      if (!session.abort.signal.aborted) {
+        if (session.status === 'active' && session.boardVersion === snapshot.version) session.diagramStatus = 'failed';
+        console.error(JSON.stringify({ sessionId: session.id, event: 'board.observer_failed', code: error instanceof Error ? error.name : 'unknown' }));
+      }
     } finally {
       session.observing = false;
       const pending = session.pendingBoard;
@@ -136,7 +145,7 @@ export function createApp(config: Config, connect = connectRealtime) {
     const sessionHandle = randomBytes(32).toString('base64url');
     const session: Session = {
       id, handleHash: hash(sessionHandle), status: 'starting', createdAt: Date.now(), deadlineAt: null,
-      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(), boardVersion: 0, boards: new Map(), observing: false,
+      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(), boardVersion: 0, boards: new Map(), diagramStatus: 'idle', observing: false,
       controller: createTurnController(event => {
         if (!session.call) throw new Error('Realtime call is not ready.');
         session.call.send(event);
@@ -228,6 +237,7 @@ export function createApp(config: Config, connect = connectRealtime) {
     if (!existing) {
       const snapshot = { version: input.version, elements: input.elements, pngBase64: input.pngBase64 };
       session.boards.set(input.version, { fingerprint, snapshot }); session.boardVersion = input.version;
+      session.diagramStatus = 'checking';
       queueObservation(session, snapshot);
     }
     res.status(202).json({ version: input.version, duplicate: result === 'duplicate' });
