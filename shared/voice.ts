@@ -145,10 +145,11 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
 
   return {
     log,
-    start() {
+    start(instructions?: string) {
       if (ready || stopped) return;
       ready = true;
       pending = true;
+      pendingInstructions = instructions;
       schedule();
     },
     request(instructions?: string) {

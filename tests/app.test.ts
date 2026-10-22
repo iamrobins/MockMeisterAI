@@ -41,6 +41,8 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   assert.equal(options!.headset, true);
   assert.match(options!.instructions, /Design ChatGPT/);
   assert.deepEqual(commands.map(e => e.type), ['response.create']);
+  assert.match(commands[0]?.type === 'response.create' ? commands[0].response?.instructions ?? '' : '', /one brief utterance/);
+  assert.match(commands[0]?.type === 'response.create' ? commands[0].response?.instructions ?? '' : '', /Let's design ChatGPT today/);
   const png = Buffer.alloc(24); Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png); png.writeUInt32BE(0x49484452, 12); png.writeUInt32BE(40, 16); png.writeUInt32BE(40, 20);
   const board = { version: 1, capturedAt: new Date().toISOString(), elements: [{ id: 'cache', version: 1, versionNonce: 1 }], pngBase64: png.toString('base64') };
   assert.equal((await post(`${path}/board`, board, sessionHandle)).status, 202);
@@ -62,6 +64,30 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   await post(`${path}/end`, {}, sessionHandle);
   assert.equal(closes, 1);
   assert.equal(options!.signal.aborted, true);
+});
+
+test('End still evaluates when provider hangup cannot be confirmed', async t => {
+  let evaluated = false;
+  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async () => ({
+    answerSdp: 'v=0', send: () => {}, close: async () => { throw new Error('hangup failed'); },
+  }), async () => {
+    evaluated = true;
+    return feedback;
+  });
+  const server = runtime.app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(async () => { await runtime.close(); server.close(); server.closeAllConnections(); });
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { Origin: 'http://localhost:3000', 'Content-Type': 'application/json' };
+  const session = await (await fetch(base + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
+  const auth = { ...headers, 'X-Interview-Session': session.sessionHandle };
+  const path = `${base}/api/sessions/${session.sessionId}`;
+  await fetch(path + '/voice', { method: 'POST', headers: auth, body: JSON.stringify({ offerSdp: 'v=0\r\nm=audio 9' }) });
+  const ended = await (await fetch(path + '/end', { method: 'POST', headers: auth, body: '{}' })).json();
+  assert.equal(evaluated, true);
+  assert.deepEqual(ended.feedback, feedback);
+  assert.equal(ended.error, undefined);
 });
 
 test('End racing with provider setup closes the late call and never greets', async t => {

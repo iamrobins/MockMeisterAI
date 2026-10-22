@@ -62,6 +62,13 @@ test('server greets once, waits for commit and playback, and coalesces resumed s
   assert.equal(sent.filter(e => e.type === 'response.create').length, 3);
 });
 
+test('server applies a dedicated instruction to the first response only', () => {
+  const sent: RealtimeClientEvent[] = [];
+  const voice = createTurnController(event => sent.push(event));
+  voice.start('Use one greeting.');
+  assert.deepEqual(sent[0], { type: 'response.create', response: { instructions: 'Use one greeting.' } });
+});
+
 test('generation completion does not release a response before playback finishes', () => {
   const sent: RealtimeClientEvent[] = [];
   const voice = createTurnController(e => sent.push(e));

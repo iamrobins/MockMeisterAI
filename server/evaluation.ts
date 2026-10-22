@@ -38,7 +38,7 @@ export function createEvaluator(apiKey: string, model: string) {
     const response = await client.responses.parse({
       model,
       store: false,
-      input: `Evaluate this ${topic.title} interview using only the finalized candidate transcript below. Do not infer missing details. Cite each strength and improvement with one or more exact citation labels. Citation labels are internal: never include them or raw item IDs in reader-facing text or limitations. Keep feedback concise. If the evidence is insufficient, say simply that there is not enough candidate evidence to provide detailed feedback; do not quote or enumerate the transcript.\n\n${JSON.stringify(evidence.map(({ citation, text }) => ({ citation, text })))}`,
+      input: `Evaluate this ${topic.title} interview using only the finalized candidate transcript below. Do not infer missing details. When the transcript contains substantive candidate answers, return one to three cited strengths and/or improvements; an interview does not need to be complete to have useful evidence. Use improvements to identify missing design detail, citing the candidate turn that shows the partial approach. Use limitations only when no substantive candidate transcript exists. Cite each strength and improvement with one or more exact citation labels. Citation labels are internal: never include them or raw item IDs in reader-facing text or limitations. Keep feedback concise.\n\n${JSON.stringify(evidence.map(({ citation, text }) => ({ citation, text })))}`,
       text: { format: zodTextFormat(feedbackSchema, 'interview_feedback') },
     });
     const feedback = feedbackSchema.parse(response.output_parsed);

@@ -79,15 +79,14 @@ export function createApp(config: Config, connect = connectRealtime, evaluate: E
     session.closing = (async () => {
       try {
         await session.call?.close();
-        try {
-          session.feedback = await evaluate([...session.controller.log.turns.values()], session.topic);
-        } catch {
-          session.error ??= 'Feedback could not be prepared. Your transcript is still available above.';
-          console.error(JSON.stringify({ sessionId: session.id, event: 'evaluation.failed' }));
-        }
       } catch {
-        session.error = 'Local audio stopped; provider termination could not be confirmed.';
         console.error(JSON.stringify({ sessionId: session.id, event: 'hangup.unconfirmed' }));
+      }
+      try {
+        session.feedback = await evaluate([...session.controller.log.turns.values()], session.topic);
+      } catch {
+        session.error ??= 'Feedback could not be prepared. Your transcript is still available above.';
+        console.error(JSON.stringify({ sessionId: session.id, event: 'evaluation.failed' }));
       } finally {
         session.status = message ? 'failed' : 'completed';
       }
@@ -170,7 +169,7 @@ export function createApp(config: Config, connect = connectRealtime, evaluate: E
     if (voiceConnected && session.call && session.status === 'starting') {
       session.status = 'active';
       session.deadlineAt = Date.now() + 600_000;
-      session.controller.start();
+      session.controller.start(`Your entire response must be one brief utterance: say exactly one short, natural greeting, then say “${session.topic.opening}” Do not add any words before or after it, and do not split it into separate messages.`);
     } else if (!voiceConnected && session.status === 'active') {
       void end(session, 'The browser voice connection was lost.');
     }
