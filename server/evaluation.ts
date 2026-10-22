@@ -20,16 +20,28 @@ export function validateFeedback(feedback: Feedback, turns: Turn[]) {
   return feedback as Feedback;
 }
 
+export function translateCitations(feedback: Feedback, citations: Map<string, string>) {
+  for (const finding of [...feedback.strengths, ...feedback.improvements]) {
+    finding.citations = finding.citations.map(citation => {
+      const itemId = citations.get(citation);
+      if (!itemId) throw new Error('Evaluator returned an invalid transcript citation.');
+      return itemId;
+    });
+  }
+  return feedback;
+}
+
 export function createEvaluator(apiKey: string, model: string) {
   const client = new OpenAI({ apiKey });
   return async (turns: Turn[], topic: Challenge) => {
-    const evidence = turns.filter(turn => turn.role === 'candidate' && turn.text.trim()).map(turn => ({ id: turn.itemId, text: turn.text }));
+    const evidence = turns.filter(turn => turn.role === 'candidate' && turn.text.trim()).map((turn, index) => ({ citation: `turn-${index + 1}`, itemId: turn.itemId, text: turn.text }));
     const response = await client.responses.parse({
       model,
       store: false,
-      input: `Evaluate this ${topic.title} interview using only the finalized candidate transcript below. Do not infer missing details. Cite each strength and improvement with one or more exact candidate turn IDs. Keep the feedback concise. Put missing evidence and any uncertainty in limitations.\n\n${JSON.stringify(evidence)}`,
+      input: `Evaluate this ${topic.title} interview using only the finalized candidate transcript below. Do not infer missing details. Cite each strength and improvement with one or more exact citation labels. Citation labels are internal: never include them or raw item IDs in reader-facing text or limitations. Keep feedback concise. If the evidence is insufficient, say simply that there is not enough candidate evidence to provide detailed feedback; do not quote or enumerate the transcript.\n\n${JSON.stringify(evidence.map(({ citation, text }) => ({ citation, text })))}`,
       text: { format: zodTextFormat(feedbackSchema, 'interview_feedback') },
     });
-    return validateFeedback(feedbackSchema.parse(response.output_parsed), turns);
+    const feedback = feedbackSchema.parse(response.output_parsed);
+    return validateFeedback(translateCitations(feedback, new Map(evidence.map(({ citation, itemId }) => [citation, itemId]))), turns);
   };
 }

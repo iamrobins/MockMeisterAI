@@ -19,3 +19,9 @@ test('each selected challenge supplies its own interviewer context', () => {
   assert.match(selected, /Design a Scalable RAG/);
   assert.match(selected, /ingestion, indexing, retrieval/);
 });
+
+test('interviewer supplies a simple baseline instead of making the candidate define scope', () => {
+  const selected = instructionsFor(getChallenge('claude-code'));
+  assert.match(selected, /state one simple, reasonable assumption appropriate to this challenge/);
+  assert.match(selected, /do not turn the question back on the candidate/);
+});

@@ -1,6 +1,6 @@
 # MockMeister
 
-<img src="public/mockmeisterai-social.png" alt="MockMeisterAI — Practice system design interviews" width="100%" />
+<img src="public/Interface.png" alt="MockMeisterAI — Practice system design interviews" width="100%" />
 
 A spoken system design interview with a browser-rendered 3D interviewer.
 Choose from five ten-minute system-design discussions: URL Shortner, WhatsApp,
