@@ -1,11 +1,12 @@
 import type { RealtimeServerEvent } from 'openai/resources/realtime/realtime';
 import { createTurnLog } from '../shared/voice.ts';
 import type { Turn } from '../shared/voice.ts';
+import type { Feedback } from '../shared/feedback.ts';
 import { createPlayback } from './playback.ts';
 import { TalkingAvatar } from '@interviewflowai/talking-avatar';
 import modelUrl from '@interviewflowai/talking-avatar/viseme-model.bin?url';
 
-type Snapshot = { status: string; deadlineAt: number | null; turns: Turn[]; error?: string };
+type Snapshot = { status: string; deadlineAt: number | null; turns: Turn[]; feedback?: Feedback; error?: string };
 type Callbacks = {
   status: (value: string) => void;
   turns: (value: Turn[]) => void;
@@ -15,6 +16,7 @@ type Callbacks = {
   ended: () => void;
   session: (id: string, handle: string) => void;
   ready: () => void;
+  feedback: (value: Feedback | undefined) => void;
 };
 
 export function createVoice(container: HTMLElement, callbacks: Callbacks) {
@@ -40,7 +42,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
       method: body === undefined ? 'GET' : 'POST',
       headers: { 'Content-Type': 'application/json', ...(handle ? { 'X-Interview-Session': handle } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: keepalive ? AbortSignal.timeout(8000) : AbortSignal.any([abort.signal, AbortSignal.timeout(25_000)]),
+      signal: keepalive ? AbortSignal.timeout(30_000) : AbortSignal.any([abort.signal, AbortSignal.timeout(25_000)]),
       keepalive,
     });
     const result = await response.json();
@@ -71,6 +73,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
         if (sessionId) {
           const snapshot = await request<Snapshot>(`/api/sessions/${sessionId}/end`, {}, true);
           callbacks.turns(snapshot.turns);
+          callbacks.feedback(snapshot.feedback);
           if (snapshot.error) callbacks.notice(snapshot.error);
         }
         callbacks.status('Interview ended');
@@ -95,7 +98,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
       if (closed) return;
       if (snapshot.deadlineAt) callbacks.deadline(snapshot.deadlineAt);
       if (snapshot.status === 'active') callbacks.ready();
-      if (snapshot.status === 'ended' || snapshot.status === 'ending') await end(snapshot.error);
+      if (snapshot.status === 'completed' || snapshot.status === 'failed') await end(snapshot.error);
     } catch (error) {
       if (!closed) await end(error instanceof Error ? error.message : 'Connection lost.');
     } finally {

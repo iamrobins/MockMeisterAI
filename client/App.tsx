@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createVoice } from './voice.ts';
 import type { Turn } from '../shared/voice.ts';
+import type { Feedback } from '../shared/feedback.ts';
 import { Whiteboard } from './Whiteboard.tsx';
 
 export function App() {
@@ -10,6 +11,7 @@ export function App() {
   const [status, setStatus] = useState('Ready when you are');
   const [notice, setNotice] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [feedback, setFeedback] = useState<Feedback>();
   const [muted, setMuted] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [deadline, setDeadline] = useState<number | null>(null);
@@ -30,13 +32,14 @@ export function App() {
     setBlocked(false);
     setNotice('');
     setTurns([]);
+    setFeedback(undefined);
     setDeadline(null);
     setSession(undefined);
     setBoardReady(false);
     setBoardStatus('');
     try {
       const call = createVoice(container.current, {
-        status: setStatus, turns: setTurns, deadline: setDeadline, notice: setNotice, blocked: setBlocked,
+        status: setStatus, turns: setTurns, deadline: setDeadline, notice: setNotice, blocked: setBlocked, feedback: setFeedback,
         ended() { voice.current = null; setActive(false); setDeadline(null); setBlocked(false); setBoardReady(false); setBoardStatus(''); },
         session(id, handle) { setSession({ id, handle }); },
         ready() { setBoardReady(true); },
@@ -77,10 +80,19 @@ export function App() {
       {boardStatus && <p className="muted" role="status">{boardStatus}</p>}
       {notice && <p className="notice" role="alert">{notice}</p>}
       <section className="captions" aria-label="Interview captions">
+        {feedback && <section className="feedback" aria-label="Interview feedback">
+          <h2>Feedback</h2>
+          {(['strengths', 'improvements'] as const).map(kind => <div key={kind}>
+            <h3>{kind === 'strengths' ? 'Strengths' : 'Improve next'}</h3>
+            {!feedback[kind].length && <p className="muted">No clear evidence.</p>}
+            <ul>{feedback[kind].map((finding, index) => <li key={index}>{finding.text} {finding.citations.map(id => <a key={id} href={`#turn-${id}`}>[{id}]</a>)}</li>)}</ul>
+          </div>)}
+          {!!feedback.limitations.length && <div><h3>Limitations</h3><ul>{feedback.limitations.map((limitation, index) => <li key={index}>{limitation}</li>)}</ul></div>}
+        </section>}
         <h2>Conversation</h2>
         {!turns.length && <p className="muted">Your conversation will appear here.</p>}
         <div aria-live="polite" aria-relevant="additions text">
-          {turns.map(turn => <p key={turn.itemId}><strong>{turn.role === 'candidate' ? 'You' : 'Interviewer'}</strong> {turn.text}{turn.interrupted && <span className="muted"> (interrupted)</span>}</p>)}
+          {turns.map(turn => <p id={`turn-${turn.itemId}`} key={turn.itemId}><strong>{turn.role === 'candidate' ? 'You' : 'Interviewer'}</strong> {turn.text}{turn.interrupted && <span className="muted"> (interrupted)</span>}</p>)}
         </div>
       </section>
       <footer><a href="/avatars/NOTICE.md" target="_blank" rel="noreferrer">Avatar credits</a></footer>

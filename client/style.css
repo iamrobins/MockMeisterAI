@@ -26,6 +26,10 @@ button.primary:hover { background: #1c388b; }
 .board-workspace { min-width: 0; height: 100vh; padding: 24px; display: flex; flex-direction: column; overflow: hidden; background: white; }
 .board-workspace .whiteboard { flex: 1; min-height: 0; height: 100%; margin: 0; border: 1px solid #dce1e9; border-radius: 12px; overflow: hidden; background: white; }
 .captions h2 { font-size: 1rem; }
+.feedback { border-bottom: 1px solid #dce1e9; margin-bottom: 20px; padding-bottom: 16px; }
+.feedback h3 { font-size: .9rem; margin: 16px 0 4px; }
+.feedback ul { margin: 4px 0; padding-left: 20px; }
+.feedback a { margin-left: 4px; font-size: .8rem; }
 .captions p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .captions strong { margin-right: 8px; }
 footer { margin-top: 32px; font-size: .8rem; }
