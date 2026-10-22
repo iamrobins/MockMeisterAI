@@ -4,11 +4,15 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import OpenAI from 'openai';
 import { createTurnController } from '../shared/voice.ts';
+import type { Turn } from '../shared/voice.ts';
+import { createEvaluator } from './evaluation.ts';
+import type { Feedback } from '../shared/feedback.ts';
 import { challenge, instructions } from './challenge.ts';
 import { connectRealtime } from './realtime.ts';
 import type { VoiceCall } from './realtime.ts';
 
-type Config = { apiKey: string; model: string; publicOrigin: string; demoEnabled: boolean };
+type Config = { apiKey: string; model: string; workerModel?: string; publicOrigin: string; demoEnabled: boolean };
+type Evaluate = (turns: Turn[]) => Promise<Feedback>;
 type Session = {
   id: string;
   handleHash: Buffer;
@@ -25,6 +29,7 @@ type Session = {
   headset: boolean;
   boardVersion: number;
   boardFingerprint?: string;
+  feedback?: Feedback;
 };
 
 const hash = (value: string) => createHash('sha256').update(value).digest();
@@ -33,7 +38,7 @@ const offer = z.object({ offerSdp: z.string().max(65_536).startsWith('v=0').refi
 const heartbeat = z.object({ voiceConnected: z.boolean() }).strict();
 const board = z.object({ version: z.number().int().positive(), capturedAt: z.string().datetime(), elements: z.array(z.object({ id: z.string().max(128), version: z.number().int(), versionNonce: z.number().int(), isDeleted: z.boolean().optional(), text: z.string().max(10_000).optional() }).passthrough()).max(500), pngBase64: z.string().max(1_400_000) }).strict();
 
-export function createApp(config: Config, connect = connectRealtime) {
+export function createApp(config: Config, connect = connectRealtime, evaluate: Evaluate = createEvaluator(config.apiKey, config.workerModel ?? 'gpt-6-luna')) {
   const app = express();
   const sessions = new Map<string, Session>();
   app.disable('x-powered-by');
@@ -49,7 +54,7 @@ export function createApp(config: Config, connect = connectRealtime) {
 
   function snapshot(session: Session) {
     return { status: session.status, deadlineAt: session.deadlineAt,
-      turns: [...session.controller.log.turns.values()], error: session.error, boardVersion: session.boardVersion };
+      turns: [...session.controller.log.turns.values()], feedback: session.feedback, error: session.error, boardVersion: session.boardVersion };
   }
 
   function find(req: Request, res: Response) {
@@ -71,6 +76,12 @@ export function createApp(config: Config, connect = connectRealtime) {
     session.closing = (async () => {
       try {
         await session.call?.close();
+        try {
+          session.feedback = await evaluate([...session.controller.log.turns.values()]);
+        } catch {
+          session.error ??= 'Feedback could not be prepared. Your transcript is still available above.';
+          console.error(JSON.stringify({ sessionId: session.id, event: 'evaluation.failed' }));
+        }
       } catch {
         session.error = 'Local audio stopped; provider termination could not be confirmed.';
         console.error(JSON.stringify({ sessionId: session.id, event: 'hangup.unconfirmed' }));

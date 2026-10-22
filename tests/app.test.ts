@@ -5,6 +5,8 @@ import { createApp } from '../server/app.ts';
 import type { ConnectOptions } from '../server/realtime.ts';
 import type { RealtimeClientEvent } from 'openai/resources/realtime/realtime';
 
+const feedback = { strengths: [], improvements: [], limitations: ['Not enough candidate evidence.'] };
+
 test('HTTP routes isolate sessions, control one call, and end it once', async t => {
   let options: ConnectOptions | undefined;
   let closes = 0;
@@ -12,7 +14,7 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async (_sdp, config) => {
     options = config;
     return { answerSdp: 'v=0\r\n', send: e => commands.push(e), close: async () => { ++closes; } };
-  });
+  }, async turns => ({ strengths: [{ text: 'Named durable storage.', citations: [turns[0]!.itemId] }], improvements: [], limitations: [] }));
   const server = runtime.app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(async () => { await runtime.close(); server.close(); server.closeAllConnections(); });
@@ -55,6 +57,7 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   const ended = await (await post(`${path}/end`, {}, sessionHandle)).json();
   assert.equal(ended.status, 'completed');
   assert.equal(ended.turns[0].text, 'Durable storage.');
+  assert.equal(ended.feedback.strengths[0].citations[0], 'answer_1');
   await post(`${path}/end`, {}, sessionHandle);
   assert.equal(closes, 1);
   assert.equal(options!.signal.aborted, true);
@@ -70,7 +73,7 @@ test('End racing with provider setup closes the late call and never greets', asy
     started!();
     await setupPending;
     return { answerSdp: 'v=0', send: () => assert.fail('Ended call must not speak'), close: async () => { ++closes; } };
-  });
+  }, async () => feedback);
   const server = runtime.app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(async () => { await runtime.close(); server.close(); server.closeAllConnections(); });
@@ -95,7 +98,7 @@ test('board images go straight into the active Realtime conversation', async t =
   const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async (_sdp, config) => {
     options = config;
     return { answerSdp: 'v=0', send: event => commands.push(event), close: async () => {} };
-  });
+  }, async () => feedback);
   const server = runtime.app.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => { await runtime.close(); server.close(); server.closeAllConnections(); });
   const address = server.address(); assert.ok(address && typeof address !== 'string');
