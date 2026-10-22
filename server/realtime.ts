@@ -26,14 +26,14 @@ export async function connectRealtime(offerSdp: string, options: ConnectOptions)
       model: options.model,
       instructions,
       output_modalities: ['audio'],
-      max_output_tokens: 512,
+      max_output_tokens: 1024,
       audio: {
         input: {
           noise_reduction: { type: 'near_field' },
           transcription: { model: 'gpt-4o-mini-transcribe', language: 'en' },
           turn_detection: { type: 'server_vad', create_response: false, interrupt_response: false },
         },
-        output: { voice: 'marin' },
+        output: { voice: 'cedar' },
       },
     },
   }, { signal: options.signal });

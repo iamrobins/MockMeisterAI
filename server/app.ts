@@ -121,7 +121,7 @@ export function createApp(config: Config, connect = connectRealtime) {
             console.error(JSON.stringify({ sessionId: session.id, event: 'voice.provider_error', code: event.error.code }));
             void end(session, 'The voice provider reported an error. Start a new interview.');
           }
-          if (event.type === 'response.done' && ['failed', 'incomplete'].includes(event.response.status ?? '')) {
+          if (event.type === 'response.done' && event.response.status === 'failed') {
             void end(session, 'The interviewer could not finish its response.');
           }
         },
