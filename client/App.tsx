@@ -15,6 +15,7 @@ export function App() {
   const [deadline, setDeadline] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [session, setSession] = useState<{ id: string; handle: string }>();
+  const [boardReady, setBoardReady] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -30,11 +31,13 @@ export function App() {
     setTurns([]);
     setDeadline(null);
     setSession(undefined);
+    setBoardReady(false);
     try {
       const call = createVoice(container.current, {
         status: setStatus, turns: setTurns, deadline: setDeadline, notice: setNotice, blocked: setBlocked,
-        ended() { voice.current = null; setActive(false); setDeadline(null); setBlocked(false); },
+        ended() { voice.current = null; setActive(false); setDeadline(null); setBlocked(false); setBoardReady(false); },
         session(id, handle) { setSession({ id, handle }); },
+        ready() { setBoardReady(true); },
       });
       voice.current = call;
       void call.start();
@@ -70,7 +73,7 @@ export function App() {
         {blocked && <button onClick={() => { void voice.current?.resumeAudio(); }}>Enable sound</button>}
       </aside>
     </section>
-    {active && session && <Whiteboard sessionId={session.id} sessionHandle={session.handle} active={active} notice={setNotice} />}
+    {active && boardReady && session && <Whiteboard sessionId={session.id} sessionHandle={session.handle} active={active} notice={setNotice} />}
     {notice && <p className="notice" role="alert">{notice}</p>}
     <section className="captions" aria-label="Interview captions">
       <h2>Conversation</h2>

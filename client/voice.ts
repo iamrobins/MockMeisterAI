@@ -14,6 +14,7 @@ type Callbacks = {
   blocked: (value: boolean) => void;
   ended: () => void;
   session: (id: string, handle: string) => void;
+  ready: () => void;
 };
 
 export function createVoice(container: HTMLElement, callbacks: Callbacks) {
@@ -93,6 +94,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
       const snapshot = await request<Snapshot>(`/api/sessions/${sessionId}/heartbeat`, { voiceConnected: true });
       if (closed) return;
       if (snapshot.deadlineAt) callbacks.deadline(snapshot.deadlineAt);
+      if (snapshot.status === 'active') callbacks.ready();
       if (snapshot.status === 'ended' || snapshot.status === 'ending') await end(snapshot.error);
     } catch (error) {
       if (!closed) await end(error instanceof Error ? error.message : 'Connection lost.');
