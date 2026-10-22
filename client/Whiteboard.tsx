@@ -9,7 +9,7 @@ export function Whiteboard({ sessionId, sessionHandle, active, notice, boardStat
   useEffect(() => () => clearTimeout(timer.current), []);
   function queueCapture() {
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => { void capture().catch(() => notice('The latest drawing could not be captured.')); }, Math.max(1_500, 5_000 - (Date.now() - lastSent.current)));
+    timer.current = setTimeout(() => { void capture().catch(() => notice('The latest drawing could not be captured.')); }, Math.max(4_000, 5_000 - (Date.now() - lastSent.current)));
   }
   async function capture() {
     if (!active || !sessionId || !sessionHandle || capturing.current) return;

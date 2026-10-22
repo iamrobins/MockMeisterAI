@@ -92,6 +92,7 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
   let pendingInstructions: string | undefined;
   let responseId: string | undefined;
   let cancelRequested = false;
+  let interruptTimer: ReturnType<typeof setTimeout> | undefined;
   const cancelled = new Set<string>();
   const drained = new Set<string>();
   const committed = new Set<string>();
@@ -108,12 +109,22 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
   }
 
   function interrupt() {
+    clearTimeout(interruptTimer);
+    interruptTimer = undefined;
     if (generating) cancelRequested = true;
     if (generating) send({ type: 'response.cancel' });
     if (generating || playing || awaitingPlayback) send({ type: 'output_audio_buffer.clear' });
     if (responseId) cancelled.add(responseId);
     playing = false;
     awaitingPlayback = false;
+  }
+
+  function confirmInterruption() {
+    clearTimeout(interruptTimer);
+    interruptTimer = setTimeout(() => {
+      interruptTimer = undefined;
+      if (speaking) interrupt();
+    }, 250);
   }
 
   return {
@@ -141,10 +152,12 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
         case 'input_audio_buffer.speech_started':
           speaking = true;
           pendingInstructions = undefined;
-          interrupt();
+          confirmInterruption();
           break;
         case 'input_audio_buffer.speech_stopped':
           speaking = false;
+          clearTimeout(interruptTimer);
+          interruptTimer = undefined;
           break;
         case 'input_audio_buffer.committed':
           if (committed.has(event.item_id)) break;

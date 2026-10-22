@@ -205,7 +205,7 @@ Use the editor's `onChange` callback, scene element IDs/bindings, and export uti
 Capture rules:
 
 - Compare a canonical scene signature using sorted element IDs, their version/versionNonce and deletion state. Ignore selection, cursor, zoom, and pan changes.
-- Debounce semantic changes for 1.5 seconds; capture at least every five seconds during continuous drawing. Export at most one frame per five seconds.
+- Debounce semantic changes for four seconds; export no more often than every five seconds during continuous drawing.
 - Freeze the scene element array used for both JSON and PNG before awaiting export. Increment the snapshot version per capture. Discard asynchronous exports if a newer capture has already been sent.
 - Export the entire non-deleted drawing against a plain background, longest side 1600 px. A blank cleared scene is a real version and must remove prior diagram facts. No desktop screenshot API is involved.
 - MVP supports native shapes, text, arrows, and freehand. Block binary-image pastes/imports and external embeds with a clear message; keep their file pipeline out of version one. Validate the same limit server-side.
