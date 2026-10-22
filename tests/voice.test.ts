@@ -71,7 +71,7 @@ test('generation completion does not release a response before playback finishes
   assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
 });
 
-test('an observer request speaks once the current audio is finished with its own prompt', () => {
+test('a prompted request speaks once the current audio is finished with its own prompt', () => {
   const sent: RealtimeClientEvent[] = [];
   const voice = createTurnController(e => sent.push(e));
   voice.start();

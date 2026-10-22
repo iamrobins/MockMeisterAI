@@ -4,8 +4,8 @@ A spoken system design interview with a browser-rendered 3D interviewer.
 The first challenge is a ten-minute URL-shortener design discussion.
 
 Milestones 1–3 implement OpenAI Realtime WebRTC, server-side turn control,
-captions, Excalidraw capture, and an asynchronous whiteboard observer. Diagram
-evidence lives only for the active interview; PostgreSQL memory and final
+captions, and Excalidraw capture sent directly to the active Realtime interviewer.
+Diagram evidence lives only for the active interview; PostgreSQL memory and final
 evidence-based feedback are later milestones. This development slice listens
 on localhost only.
 
@@ -41,7 +41,6 @@ npm start
 | --- | --- |
 | `OPENAI_API_KEY` | Server-only project key; never prefix it with `VITE_` |
 | `REALTIME_MODEL` | Defaults to `gpt-realtime-2.1-mini` |
-| `WORKER_MODEL` | Defaults to `gpt-6-luna` for the whiteboard observer |
 | `PORT` | Defaults to `3000` |
 | `PUBLIC_ORIGIN` | Exact browser origin, normally `http://localhost:3000` |
 | `DEMO_ENABLED` | Must be `true` to admit interviews |

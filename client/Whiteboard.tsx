@@ -21,7 +21,7 @@ export function Whiteboard({ sessionId, sessionHandle, active, notice, boardStat
       const pngBase64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(reader.error); reader.onload = () => resolve(String(reader.result).split(',', 2)[1]); reader.readAsDataURL(blob); });
       const response = await fetch(`/api/sessions/${sessionId}/board`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Interview-Session': sessionHandle }, body: JSON.stringify({ version: ++version.current, capturedAt: new Date().toISOString(), elements, pngBase64 }) });
       if (!response.ok) notice('The latest drawing was not saved for this interview.');
-      else boardStatus('Checking board…');
+      else boardStatus(elements.some((element: any) => !element.isDeleted) ? 'Board shared' : 'Board cleared');
       lastSent.current = Date.now();
     } finally {
       capturing.current = false;

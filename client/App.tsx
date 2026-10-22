@@ -22,23 +22,6 @@ export function App() {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearInterval(timer); void voice.current?.end(); };
   }, []);
-  useEffect(() => {
-    if (boardStatus !== 'Checking board…' || !session) return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/sessions/${session.id}`, { headers: { 'X-Interview-Session': session.handle } });
-        const snapshot = await response.json();
-        if (cancelled) return;
-        if (snapshot.diagramStatus === 'ready') setBoardStatus('Board checked');
-        else if (snapshot.diagramStatus === 'failed') setBoardStatus('Board check failed');
-      } catch { /* A later board change or interview end clears this status. */ }
-    };
-    void poll();
-    const timer = setInterval(() => { void poll(); }, 1_000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [boardStatus, session]);
-
   function start() {
     if (voice.current || !container.current) return;
     setActive(true);

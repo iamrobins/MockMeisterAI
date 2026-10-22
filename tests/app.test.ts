@@ -9,7 +9,7 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   let options: ConnectOptions | undefined;
   let closes = 0;
   const commands: RealtimeClientEvent[] = [];
-  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', workerModel: 'gpt-6-luna', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async (_sdp, config) => {
+  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async (_sdp, config) => {
     options = config;
     return { answerSdp: 'v=0\r\n', send: e => commands.push(e), close: async () => { ++closes; } };
   });
@@ -65,7 +65,7 @@ test('End racing with provider setup closes the late call and never greets', asy
   const setupStarted = new Promise<void>(resolve => { started = resolve; });
   const setupPending = new Promise<void>(resolve => { finish = resolve; });
   let closes = 0;
-  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', workerModel: 'gpt-6-luna', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async () => {
+  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async () => {
     started!();
     await setupPending;
     return { answerSdp: 'v=0', send: () => assert.fail('Ended call must not speak'), close: async () => { ++closes; } };
@@ -88,15 +88,13 @@ test('End racing with provider setup closes the late call and never greets', asy
   assert.equal(closes, 1);
 });
 
-test('observer discards stale work, processes the newest board, and clears a blank board', async t => {
-  let resolveFirst!: (value: { nodes: []; edges: []; changes: string[]; uncertainties: [] }) => void;
-  let calls = 0;
+test('board images go straight into the active Realtime conversation', async t => {
+  let options: ConnectOptions | undefined;
   const commands: RealtimeClientEvent[] = [];
-  const first = new Promise<{ nodes: []; edges: []; changes: string[]; uncertainties: [] }>(resolve => { resolveFirst = resolve; });
-  const runtime = createApp({
-    apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', workerModel: 'gpt-6-luna', publicOrigin: 'http://localhost:3000', demoEnabled: true,
-    observer: async snapshot => ++calls === 1 ? first : { nodes: [], edges: [], changes: [`v${snapshot.version}`], uncertainties: [] },
-  }, async () => ({ answerSdp: 'v=0', send: event => commands.push(event), close: async () => {} }));
+  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async (_sdp, config) => {
+    options = config;
+    return { answerSdp: 'v=0', send: event => commands.push(event), close: async () => {} };
+  });
   const server = runtime.app.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => { await runtime.close(); server.close(); server.closeAllConnections(); });
   const address = server.address(); assert.ok(address && typeof address !== 'string');
@@ -110,17 +108,13 @@ test('observer discards stale work, processes the newest board, and clears a bla
   const png = Buffer.alloc(24); Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png); png.writeUInt32BE(0x49484452, 12); png.writeUInt32BE(40, 16); png.writeUInt32BE(40, 20);
   const submit = (version: number, elements: unknown[]) => fetch(path + '/board', { method: 'POST', headers: auth, body: JSON.stringify({ version, capturedAt: new Date().toISOString(), elements, pngBase64: png.toString('base64') }) });
   await submit(1, [{ id: 'cache', version: 1, versionNonce: 1 }]);
-  let state = await (await fetch(path, { headers: { 'X-Interview-Session': session.sessionHandle } })).json();
-  assert.equal(state.diagramStatus, 'checking');
-  await submit(2, [{ id: 'database', version: 1, versionNonce: 1 }]);
-  resolveFirst({ nodes: [], edges: [], changes: ['stale'], uncertainties: [] });
-  await new Promise(resolve => setTimeout(resolve, 20));
-  state = await (await fetch(path, { headers: { 'X-Interview-Session': session.sessionHandle } })).json();
-  assert.equal(state.diagram.snapshotVersion, 2); assert.deepEqual(state.diagram.changes, ['v2']);
-  assert.equal(state.diagramStatus, 'ready');
-  assert.ok(commands.some(event => event.type === 'session.update'));
-  await submit(3, []);
-  await new Promise(resolve => setTimeout(resolve, 20));
-  state = await (await fetch(path, { headers: { 'X-Interview-Session': session.sessionHandle } })).json();
-  assert.equal(state.diagram.snapshotVersion, 3); assert.deepEqual(state.diagram.nodes, []); assert.equal(state.diagramStatus, 'ready'); assert.equal(calls, 2);
+  const image = commands.find(event => event.type === 'conversation.item.create');
+  assert.ok(image && image.item.type === 'message' && image.item.role === 'user');
+  assert.equal(image.item.content[1].type, 'input_image');
+  assert.equal(image.item.content[1].image_url, `data:image/png;base64,${png.toString('base64')}`);
+  options!.onEvent({ type: 'response.done', event_id: 'greeting_done', response: { id: 'greeting', status: 'cancelled', output: [] } });
+  const boardQuestion = commands.filter(event => event.type === 'response.create').at(-1);
+  assert.ok(boardQuestion?.response?.instructions?.includes('whiteboard image was just added'));
+  await submit(2, []);
+  assert.equal(commands.filter(event => event.type === 'conversation.item.create').length, 1);
 });
