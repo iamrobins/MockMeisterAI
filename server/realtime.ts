@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import WebSocket from 'ws';
 import type { RealtimeClientEvent, RealtimeServerEvent } from 'openai/resources/realtime/realtime';
-import { instructions } from './challenge.ts';
 
 export type VoiceCall = {
   answerSdp: string;
@@ -13,6 +12,7 @@ export type ConnectOptions = {
   apiKey: string;
   model: string;
   headset: boolean;
+  instructions: string;
   signal: AbortSignal;
   onEvent: (event: RealtimeServerEvent) => void;
   onFailure: () => void;
@@ -25,7 +25,7 @@ export async function connectRealtime(offerSdp: string, options: ConnectOptions)
     session: {
       type: 'realtime',
       model: options.model,
-      instructions,
+      instructions: options.instructions,
       output_modalities: ['audio'],
       max_output_tokens: 'inf',
       audio: {
@@ -94,7 +94,7 @@ export async function connectRealtime(offerSdp: string, options: ConnectOptions)
         }
       });
       sideband.once('open', () => sideband.send(JSON.stringify({
-        type: 'session.update', session: { type: 'realtime', instructions },
+        type: 'session.update', session: { type: 'realtime', instructions: options.instructions },
       })));
       // A rejected handshake must not leave its timeout running.
       sideband.once('close', () => clearTimeout(timer));

@@ -5,6 +5,7 @@ import type { Feedback } from '../shared/feedback.ts';
 import { createPlayback } from './playback.ts';
 import { TalkingAvatar } from '@interviewflowai/talking-avatar';
 import modelUrl from '@interviewflowai/talking-avatar/viseme-model.bin?url';
+import type { ChallengeId } from '../shared/challenges.ts';
 
 type Snapshot = { status: string; deadlineAt: number | null; turns: Turn[]; feedback?: Feedback; error?: string };
 type Callbacks = {
@@ -139,7 +140,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
     else maybeConnected();
   };
 
-  async function start(headset: boolean) {
+  async function start(headset: boolean, challengeId: ChallengeId) {
     setupTimer = setTimeout(() => { void end('Connection setup timed out. Please try again.'); }, 30_000);
     window.addEventListener('pagehide', leave);
     try {
@@ -150,7 +151,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
       await playback.ready;
       if (closed) return;
       callbacks.status('Connecting…');
-      const session = await request<{ sessionId: string; sessionHandle: string }>('/api/sessions', { headset });
+      const session = await request<{ sessionId: string; sessionHandle: string }>('/api/sessions', { headset, challengeId });
       sessionId = session.sessionId;
       handle = session.sessionHandle;
       callbacks.session(sessionId, handle);

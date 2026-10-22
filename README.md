@@ -1,7 +1,8 @@
 # MockMeister
 
 A spoken system design interview with a browser-rendered 3D interviewer.
-The first challenge is a ten-minute URL-shortener design discussion.
+Choose from five ten-minute system-design discussions: URL Shortner, WhatsApp,
+ChatGPT, Claude Code, or a scalable RAG system.
 
 Milestones 1–3 implement OpenAI Realtime WebRTC, server-side turn control,
 captions, and Excalidraw capture sent directly to the active Realtime interviewer.

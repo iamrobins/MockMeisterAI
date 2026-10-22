@@ -3,6 +3,8 @@ import { createVoice } from './voice.ts';
 import type { Turn } from '../shared/voice.ts';
 import type { Feedback } from '../shared/feedback.ts';
 import { Whiteboard } from './Whiteboard.tsx';
+import { challenges, defaultChallenge } from '../shared/challenges.ts';
+import type { ChallengeId } from '../shared/challenges.ts';
 
 export function App() {
   const container = useRef<HTMLDivElement>(null);
@@ -20,6 +22,9 @@ export function App() {
   const [boardReady, setBoardReady] = useState(false);
   const [boardStatus, setBoardStatus] = useState('');
   const [headset, setHeadset] = useState(false);
+  const [topicId, setTopicId] = useState<ChallengeId>(defaultChallenge.id);
+  const [screen, setScreen] = useState<'landing' | 'tool'>('landing');
+  const topic = challenges.find(challenge => challenge.id === topicId) ?? defaultChallenge;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -45,7 +50,7 @@ export function App() {
         ready() { setBoardReady(true); },
       });
       voice.current = call;
-      void call.start(headset);
+      void call.start(headset, topicId);
     } catch {
       setNotice('This browser could not initialize audio. Try a current desktop browser on localhost or HTTPS.');
       setActive(false);
@@ -53,10 +58,31 @@ export function App() {
   }
 
   const remaining = deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 600;
+  if (screen === 'landing') return <main className="landing">
+    <nav className="landing-nav"><strong>MockMeisterAI</strong><span>System design practice</span></nav>
+    <section className="hero">
+      <p className="eyebrow">Speak. Sketch. Improve.</p>
+      <h1>Practice system design like it’s the real interview.</h1>
+      <p className="hero-copy">MockMeisterAI gives you a focused voice interview, a shared whiteboard, and evidence-based feedback when you finish.</p>
+      <div className="topic-picker">
+        <label htmlFor="challenge">Choose a design challenge</label>
+        <select id="challenge" value={topicId} onChange={event => setTopicId(event.target.value as ChallengeId)}>
+          {challenges.map(challenge => <option key={challenge.id} value={challenge.id}>{challenge.title}</option>)}
+        </select>
+        <p>{topic.summary}</p>
+      </div>
+      <button className="hero-cta" onClick={() => setScreen('tool')}>Open the practice tool <span aria-hidden="true">↓</span></button>
+    </section>
+    <section className="landing-details" aria-label="How MockMeisterAI works">
+      <div><strong>Talk it through</strong><p>A concise interviewer follows your choices and tradeoffs.</p></div>
+      <div><strong>Draw the architecture</strong><p>Use the whiteboard to make your systems thinking visible.</p></div>
+      <div><strong>Review the evidence</strong><p>Get feedback tied to the ideas you actually expressed.</p></div>
+    </section>
+  </main>;
   return <main className="app-shell">
     <aside className="sidebar">
       <header>
-        <div><h1>MockMeister</h1><p>System design · URL shortener</p></div>
+        <div><button className="home-link" onClick={() => setScreen('landing')} disabled={active}>MockMeisterAI</button><p>System design · {topic.title.replace('Design ', '')}</p></div>
         <div className="controls">
           <span className="timer" aria-label="Time remaining">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</span>
           {active ? <>
@@ -67,8 +93,9 @@ export function App() {
       </header>
       <section className="brief">
         <p className="eyebrow">Your challenge</p>
-        <h2>Design a URL shortener.</h2>
-        <p>Talk through the requirements, data model, request flow, and how you would handle scale and failure.</p>
+        <h2>{topic.title}.</h2>
+        <label className="challenge-select" htmlFor="tool-challenge">Choose a topic<select id="tool-challenge" value={topicId} disabled={active} onChange={event => setTopicId(event.target.value as ChallengeId)}>{challenges.map(challenge => <option key={challenge.id} value={challenge.id}>{challenge.title}</option>)}</select></label>
+        <p>{topic.summary} Talk through the requirements, request flow, scale, and failure.</p>
         <p>Use headphones for the clearest conversation. You can interrupt the interviewer at any time.</p>
         <p className="muted">Speech and drawings are processed for this interview and held only in memory while it is active. Raw audio is not recorded. Provider retention policies apply separately.</p>
       </section>

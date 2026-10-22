@@ -3,6 +3,7 @@ import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import type { Turn } from '../shared/voice.ts';
 import type { Feedback } from '../shared/feedback.ts';
+import type { Challenge } from '../shared/challenges.ts';
 
 const finding = z.object({ text: z.string().min(1).max(500), citations: z.array(z.string().min(1)).min(1).max(3) }).strict();
 export const feedbackSchema = z.object({
@@ -21,12 +22,12 @@ export function validateFeedback(feedback: Feedback, turns: Turn[]) {
 
 export function createEvaluator(apiKey: string, model: string) {
   const client = new OpenAI({ apiKey });
-  return async (turns: Turn[]) => {
+  return async (turns: Turn[], topic: Challenge) => {
     const evidence = turns.filter(turn => turn.role === 'candidate' && turn.text.trim()).map(turn => ({ id: turn.itemId, text: turn.text }));
     const response = await client.responses.parse({
       model,
       store: false,
-      input: `Evaluate this URL-shortener interview using only the finalized candidate transcript below. Do not infer missing details. Cite each strength and improvement with one or more exact candidate turn IDs. Keep the feedback concise. Put missing evidence and any uncertainty in limitations.\n\n${JSON.stringify(evidence)}`,
+      input: `Evaluate this ${topic.title} interview using only the finalized candidate transcript below. Do not infer missing details. Cite each strength and improvement with one or more exact candidate turn IDs. Keep the feedback concise. Put missing evidence and any uncertainty in limitations.\n\n${JSON.stringify(evidence)}`,
       text: { format: zodTextFormat(feedbackSchema, 'interview_feedback') },
     });
     return validateFeedback(feedbackSchema.parse(response.output_parsed), turns);
