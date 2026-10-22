@@ -5,7 +5,7 @@ import '@excalidraw/excalidraw/index.css';
 type Props = { sessionId?: string; sessionHandle?: string; active: boolean; notice: (message: string) => void; boardStatus: (message: string) => void };
 
 export function Whiteboard({ sessionId, sessionHandle, active, notice, boardStatus }: Props) {
-  const latest = useRef<readonly unknown[]>([]); const signature = useRef(''); const version = useRef(0); const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); const lastSent = useRef(0); const capturing = useRef(false);
+  const latest = useRef<readonly unknown[]>([]); const signature = useRef('[]'); const version = useRef(0); const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); const lastSent = useRef(0); const capturing = useRef(false);
   useEffect(() => () => clearTimeout(timer.current), []);
   function queueCapture() {
     clearTimeout(timer.current);

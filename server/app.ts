@@ -95,7 +95,7 @@ export function createApp(config: Config, connect = connectRealtime) {
   function updateInterviewer(session: Session) {
     if (!session.call || !session.diagram) return;
     const { snapshotVersion, nodes, edges, uncertainties } = session.diagram;
-    try { session.call.send({ type: 'session.update', session: { type: 'realtime', instructions: `${instructions}\n\nWhiteboard observer, snapshot v${snapshotVersion}: ${JSON.stringify({ nodes, edges, uncertainties })}\nUse this only as uncertain visual evidence. Ask a concise clarification when needed; never claim certainty beyond the observation.` } }); } catch { /* Voice control may close while an observation completes. */ }
+    try { session.call.send({ type: 'session.update', session: { type: 'realtime', instructions: `${instructions}\n\nWhiteboard observer, snapshot v${snapshotVersion}: ${JSON.stringify({ nodes, edges, uncertainties })}\nUse this quietly as uncertain visual evidence. If needed, ask a concise technical clarification, not about board visibility or uploads.` } }); } catch { /* Voice control may close while an observation completes. */ }
   }
   async function observe(session: Session, snapshot: BoardSnapshot): Promise<void> {
     session.observing = true;
