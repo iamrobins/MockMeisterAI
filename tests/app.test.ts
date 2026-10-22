@@ -37,6 +37,13 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   await post(`${path}/heartbeat`, { voiceConnected: true }, sessionHandle);
   await post(`${path}/heartbeat`, { voiceConnected: true }, sessionHandle);
   assert.deepEqual(commands.map(e => e.type), ['response.create']);
+  const png = Buffer.alloc(24); Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png); png.writeUInt32BE(0x49484452, 12); png.writeUInt32BE(40, 16); png.writeUInt32BE(40, 20);
+  const board = { version: 1, capturedAt: new Date().toISOString(), elements: [{ id: 'cache', version: 1, versionNonce: 1 }], pngBase64: png.toString('base64') };
+  assert.equal((await post(`${path}/board`, board, sessionHandle)).status, 202);
+  const duplicate = await post(`${path}/board`, board, sessionHandle);
+  assert.equal(duplicate.status, 202);
+  assert.equal((await duplicate.json()).duplicate, true);
+  assert.equal((await post(`${path}/board`, { ...board, elements: [{ id: 'database', version: 1, versionNonce: 1 }] }, sessionHandle)).status, 409);
   options!.onEvent({ type: 'conversation.item.input_audio_transcription.completed', event_id: 'transcript_1', item_id: 'answer_1', transcript: 'Durable storage.', content_index: 0, usage: { type: 'duration', seconds: 1 } });
   options!.onEvent({ type: 'response.done', event_id: 'response_1', response: {
     id: 'greeting', status: 'incomplete', status_details: { type: 'incomplete', reason: 'max_output_tokens' }, output: [],
@@ -45,7 +52,7 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   assert.equal(ongoing.status, 'active');
   assert.equal(ongoing.error, undefined);
   const ended = await (await post(`${path}/end`, {}, sessionHandle)).json();
-  assert.equal(ended.status, 'ended');
+  assert.equal(ended.status, 'completed');
   assert.equal(ended.turns[0].text, 'Durable storage.');
   await post(`${path}/end`, {}, sessionHandle);
   assert.equal(closes, 1);

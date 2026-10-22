@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createVoice } from './voice.ts';
 import type { Turn } from '../shared/voice.ts';
+import { Whiteboard } from './Whiteboard.tsx';
 
 export function App() {
   const container = useRef<HTMLDivElement>(null);
@@ -13,6 +14,7 @@ export function App() {
   const [blocked, setBlocked] = useState(false);
   const [deadline, setDeadline] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [session, setSession] = useState<{ id: string; handle: string }>();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -27,10 +29,12 @@ export function App() {
     setNotice('');
     setTurns([]);
     setDeadline(null);
+    setSession(undefined);
     try {
       const call = createVoice(container.current, {
         status: setStatus, turns: setTurns, deadline: setDeadline, notice: setNotice, blocked: setBlocked,
         ended() { voice.current = null; setActive(false); setDeadline(null); setBlocked(false); },
+        session(id, handle) { setSession({ id, handle }); },
       });
       voice.current = call;
       void call.start();
@@ -52,13 +56,13 @@ export function App() {
         </> : <button className="primary" onClick={start}>Start interview</button>}
       </div>
     </header>
-    <section className="interview">
+    <section className={active ? 'interview active-interview' : 'interview'}>
       <div className="brief">
         <p className="eyebrow">Your challenge</p>
         <h2>Design a URL shortener.</h2>
         <p>Talk through the requirements, data model, request flow, and how you would handle scale and failure.</p>
         <p>Use headphones for the clearest conversation. You can interrupt the interviewer at any time.</p>
-        <p className="muted">Speech is processed by OpenAI. This development version keeps transcripts in memory only and does not record raw audio. Provider retention policies apply separately.</p>
+        <p className="muted">Speech and drawings are processed for this interview and held only in memory while it is active. Raw audio is not recorded. Provider retention policies apply separately.</p>
       </div>
       <aside aria-label="Interviewer">
         <div ref={container} className="avatar" aria-label="3D interviewer" />
@@ -66,6 +70,7 @@ export function App() {
         {blocked && <button onClick={() => { void voice.current?.resumeAudio(); }}>Enable sound</button>}
       </aside>
     </section>
+    {active && session && <Whiteboard sessionId={session.id} sessionHandle={session.handle} active={active} notice={setNotice} />}
     {notice && <p className="notice" role="alert">{notice}</p>}
     <section className="captions" aria-label="Interview captions">
       <h2>Conversation</h2>

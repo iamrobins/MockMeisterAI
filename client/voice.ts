@@ -13,6 +13,7 @@ type Callbacks = {
   notice: (value: string) => void;
   blocked: (value: boolean) => void;
   ended: () => void;
+  session: (id: string, handle: string) => void;
 };
 
 export function createVoice(container: HTMLElement, callbacks: Callbacks) {
@@ -147,6 +148,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
       const session = await request<{ sessionId: string; sessionHandle: string }>('/api/sessions', {});
       sessionId = session.sessionId;
       handle = session.sessionHandle;
+      callbacks.session(sessionId, handle);
       if (closed) { await request(`/api/sessions/${sessionId}/end`, {}, true); return; }
       mic.getAudioTracks().forEach(track => peer.addTrack(track, mic!));
       await peer.setLocalDescription(await peer.createOffer());

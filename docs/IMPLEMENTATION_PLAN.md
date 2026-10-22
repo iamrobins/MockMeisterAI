@@ -25,12 +25,12 @@ This comes first because audio playback, interruption, and provider account acce
 ## Milestone 2 — Add the actual whiteboard and durable session memory
 
 - Embed Excalidraw with its CSS and locally served fonts/assets; configure `EXCALIDRAW_ASSET_PATH` before the editor loads. Keep the page to the canvas, small avatar, captions, time, Mute, and End.
-- Add the PostgreSQL migration, session creation, event append/dedupe, scoped session handle, lifecycle states, and SSE status.
+- Add session creation, event append/dedupe, scoped session handle, lifecycle states, and SSE status. Keep evidence in memory for the active browser session; PostgreSQL is intentionally deferred.
 - Persist finalized candidate/interviewer turns, retaining provider ordering identifiers and heard/interrupted flags.
 - Implement scene fingerprinting, debounced/throttled PNG capture, versioned native scene metadata, and snapshot persistence. Include the cleared-board case.
 - Add the fixed URL-shortener brief, server deadline, and time-based phase preferences.
 
-**Done:** a short voice-and-drawing session leaves ordered inspectable evidence in PostgreSQL, UI-only canvas actions do not generate captures, and the five-minute no-drawing scenario continues to record speech. Test duplicate events, state transactions, and version conflicts.
+**Done:** a short voice-and-drawing session keeps ordered inspectable evidence while it is active, UI-only canvas actions do not generate captures, and the five-minute no-drawing scenario continues to record speech. Test duplicate events and version conflicts.
 
 ## Milestone 3 — Add the asynchronous Whiteboard Observer
 

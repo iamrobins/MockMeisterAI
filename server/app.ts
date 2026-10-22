@@ -12,7 +12,7 @@ type Config = { apiKey: string; model: string; publicOrigin: string; demoEnabled
 type Session = {
   id: string;
   handleHash: Buffer;
-  status: 'starting' | 'active' | 'ending' | 'ended';
+  status: 'starting' | 'active' | 'finalizing' | 'completed' | 'failed';
   createdAt: number;
   deadlineAt: number | null;
   lastHeartbeat: number;
@@ -22,12 +22,15 @@ type Session = {
   call?: VoiceCall;
   closing?: Promise<void>;
   error?: string;
+  boardVersion: number;
+  boards: Map<number, string>;
 };
 
 const hash = (value: string) => createHash('sha256').update(value).digest();
 const empty = z.object({}).strict();
 const offer = z.object({ offerSdp: z.string().max(65_536).startsWith('v=0').refine(sdp => sdp.includes('m=audio')) }).strict();
 const heartbeat = z.object({ voiceConnected: z.boolean() }).strict();
+const board = z.object({ version: z.number().int().positive(), capturedAt: z.string().datetime(), elements: z.array(z.object({ id: z.string().max(128), version: z.number().int(), versionNonce: z.number().int(), isDeleted: z.boolean().optional(), text: z.string().max(10_000).optional() }).passthrough()).max(500), pngBase64: z.string().max(1_400_000) }).strict();
 
 export function createApp(config: Config, connect = connectRealtime) {
   const app = express();
@@ -41,11 +44,11 @@ export function createApp(config: Config, connect = connectRealtime) {
     }
     next();
   });
-  app.use('/api', express.json({ limit: '70kb' }));
+  app.use('/api', express.json({ limit: '3mb' }));
 
   function snapshot(session: Session) {
     return { status: session.status, deadlineAt: session.deadlineAt,
-      turns: [...session.controller.log.turns.values()], error: session.error };
+      turns: [...session.controller.log.turns.values()], error: session.error, diagramVersion: session.boardVersion };
   }
 
   function find(req: Request, res: Response) {
@@ -60,7 +63,7 @@ export function createApp(config: Config, connect = connectRealtime) {
 
   function end(session: Session, message?: string) {
     if (session.closing) return session.closing;
-    session.status = 'ending';
+    session.status = 'finalizing';
     session.error ??= message;
     try { session.controller.stop(); } catch { /* The REST hangup still runs if control has disconnected. */ }
     session.abort.abort();
@@ -71,7 +74,7 @@ export function createApp(config: Config, connect = connectRealtime) {
         session.error = 'Local audio stopped; provider termination could not be confirmed.';
         console.error(JSON.stringify({ sessionId: session.id, event: 'hangup.unconfirmed' }));
       } finally {
-        session.status = 'ended';
+        session.status = message ? 'failed' : 'completed';
       }
     })();
     return session.closing;
@@ -84,7 +87,7 @@ export function createApp(config: Config, connect = connectRealtime) {
       res.status(503).json({ error: { code: 'setup', message: 'Interview start is unavailable. Check server configuration.', retryable: false } });
       return;
     }
-    if ([...sessions.values()].filter(s => s.status !== 'ended').length >= 2) {
+    if ([...sessions.values()].filter(s => s.status !== 'completed' && s.status !== 'failed').length >= 2) {
       res.status(429).json({ error: { code: 'busy', message: 'Both interviews are in use. Try again shortly.', retryable: true } });
       return;
     }
@@ -92,7 +95,7 @@ export function createApp(config: Config, connect = connectRealtime) {
     const sessionHandle = randomBytes(32).toString('base64url');
     const session: Session = {
       id, handleHash: hash(sessionHandle), status: 'starting', createdAt: Date.now(), deadlineAt: null,
-      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(),
+      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(), boardVersion: 0, boards: new Map(),
       controller: createTurnController(event => {
         if (!session.call) throw new Error('Realtime call is not ready.');
         session.call.send(event);
@@ -162,12 +165,34 @@ export function createApp(config: Config, connect = connectRealtime) {
     const session = find(req, res);
     if (session) res.json(snapshot(session));
   });
+  app.get('/api/sessions/:id/events', (req, res) => {
+    const session = find(req, res); if (!session) return;
+    res.set({ 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'Cache-Control': 'no-cache' });
+    res.write(`event: session.status\ndata: ${JSON.stringify(snapshot(session))}\n\n`);
+    const keepalive = setInterval(() => res.write(': keepalive\n\n'), 15_000);
+    req.on('close', () => clearInterval(keepalive));
+  });
+  app.post('/api/sessions/:id/board', async (req, res) => {
+    const session = find(req, res); if (!session) return;
+    const input = board.parse(req.body);
+    if (session.status !== 'active') return res.status(409).json({ error: { code: 'state', message: 'The interview is not accepting drawings.', retryable: false } });
+    const png = Buffer.from(input.pngBase64, 'base64');
+    const validPng = png.length >= 24 && png.subarray(0, 8).compare(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) === 0 && png.readUInt32BE(12) === 0x49484452 && png.readUInt32BE(16) > 0 && png.readUInt32BE(16) <= 1600 && png.readUInt32BE(20) > 0 && png.readUInt32BE(20) <= 1600;
+    if (png.length > 1_000_000 || !validPng) return res.status(400).json({ error: { code: 'board', message: 'Invalid board image.', retryable: false } });
+    const fingerprint = createHash('sha256').update(JSON.stringify(input.elements)).update(png).digest('hex');
+    const existing = session.boards.get(input.version);
+    if (existing && existing !== fingerprint) return res.status(409).json({ error: { code: 'version', message: 'Conflicting board version.', retryable: false } });
+    if (!existing && input.version <= session.boardVersion) return res.status(409).json({ error: { code: 'version', message: 'Board version is older than the saved scene.', retryable: false } });
+    const result = existing ? 'duplicate' : 'accepted';
+    if (!existing) { session.boards.set(input.version, fingerprint); session.boardVersion = input.version; }
+    res.status(202).json({ version: input.version, duplicate: result === 'duplicate' });
+  });
   app.post('/api/sessions/:id/end', async (req, res) => {
     const session = find(req, res);
     if (!session) return;
-    empty.parse(req.body);
+    z.object({ lastBoardVersion: z.number().int().nonnegative().optional() }).strict().parse(req.body);
     await end(session);
-    res.json(snapshot(session));
+    res.status(202).json(snapshot(session));
   });
   app.use('/api', (_req, res) => res.status(404).json({ error: { code: 'route', message: 'Not found.', retryable: false } }));
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
@@ -181,7 +206,7 @@ export function createApp(config: Config, connect = connectRealtime) {
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const session of sessions.values()) {
-      if (session.status === 'ended') {
+      if (session.status === 'completed' || session.status === 'failed') {
         if (now - session.lastHeartbeat > 60_000) sessions.delete(session.id);
       } else if (session.deadlineAt && now >= session.deadlineAt) {
         void end(session, 'The ten-minute interview has ended.');

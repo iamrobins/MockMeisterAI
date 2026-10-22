@@ -63,7 +63,9 @@ Phase is a time-based prompt preference, not an obligation to interrupt a useful
 
 Track `candidateSpeaking`, `responseInFlight`, `outputPlaying`, `pendingResponse`, and a monotonically increasing `speechEpoch` in runtime state. Generated response completion and audible playback completion are distinct.
 
-## 3. Durable records
+## 3. Session records
+
+Milestone 2 intentionally keeps session records in the server's in-memory session map. The session handle still scopes requests, but evidence is not durable and is discarded on End, expiry, or restart. The PostgreSQL schema below is deferred design work, not a current dependency.
 
 Use three tables. Worker outputs and reports are event payloads; avoid a separate table for each role. Store current materialized state in `sessions.state`.
 

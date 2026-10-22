@@ -44,6 +44,8 @@ After ending: replace the small side panel with feedback or show a plain full-wi
 
 ## 3. Architecture
 
+Session evidence is intentionally held in memory only for the lifetime of the active browser interview. It is discarded when the session ends, the browser becomes inactive, or the server restarts; PostgreSQL and durable report history are explicitly deferred.
+
 ```mermaid
 flowchart LR
     subgraph Browser

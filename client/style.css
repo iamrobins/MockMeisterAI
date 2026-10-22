@@ -22,6 +22,7 @@ aside { text-align: center; }
 aside p { font-size: .9rem; }
 .notice { background: #fff5d9; border: 1px solid #e2c37e; border-radius: 8px; padding: 12px 16px; }
 .captions { border-top: 1px solid #dce1e9; padding-top: 20px; }
+.whiteboard { height: min(62vh, 680px); margin: 20px 0; border: 1px solid #dce1e9; border-radius: 12px; overflow: hidden; background: white; }
 .captions h2 { font-size: 1rem; }
 .captions p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .captions strong { margin-right: 8px; }
