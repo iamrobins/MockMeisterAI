@@ -9,6 +9,7 @@ const production = process.argv[1]?.endsWith('.js');
 const { app, close } = createApp({
   apiKey: process.env.OPENAI_API_KEY ?? '',
   model: process.env.REALTIME_MODEL ?? 'gpt-realtime-2.1-mini',
+  workerModel: process.env.WORKER_MODEL ?? 'gpt-6-luna',
   publicOrigin,
   demoEnabled: process.env.DEMO_ENABLED === 'true',
 });

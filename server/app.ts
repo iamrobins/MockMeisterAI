@@ -4,11 +4,13 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import OpenAI from 'openai';
 import { createTurnController } from '../shared/voice.ts';
-import { challenge } from './challenge.ts';
+import { challenge, instructions } from './challenge.ts';
 import { connectRealtime } from './realtime.ts';
 import type { VoiceCall } from './realtime.ts';
+import { createObserver } from './observer.ts';
+import type { BoardSnapshot, Observation, Observer } from './observer.ts';
 
-type Config = { apiKey: string; model: string; publicOrigin: string; demoEnabled: boolean };
+type Config = { apiKey: string; model: string; workerModel: string; publicOrigin: string; demoEnabled: boolean; observer?: Observer };
 type Session = {
   id: string;
   handleHash: Buffer;
@@ -23,7 +25,10 @@ type Session = {
   closing?: Promise<void>;
   error?: string;
   boardVersion: number;
-  boards: Map<number, string>;
+  boards: Map<number, { fingerprint: string; snapshot: BoardSnapshot }>;
+  diagram?: Observation;
+  observing: boolean;
+  pendingBoard?: BoardSnapshot;
 };
 
 const hash = (value: string) => createHash('sha256').update(value).digest();
@@ -35,6 +40,7 @@ const board = z.object({ version: z.number().int().positive(), capturedAt: z.str
 export function createApp(config: Config, connect = connectRealtime) {
   const app = express();
   const sessions = new Map<string, Session>();
+  const observer = config.observer ?? createObserver(config.apiKey, config.workerModel);
   app.disable('x-powered-by');
   app.use('/api', (req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -48,7 +54,7 @@ export function createApp(config: Config, connect = connectRealtime) {
 
   function snapshot(session: Session) {
     return { status: session.status, deadlineAt: session.deadlineAt,
-      turns: [...session.controller.log.turns.values()], error: session.error, diagramVersion: session.boardVersion };
+      turns: [...session.controller.log.turns.values()], error: session.error, diagramVersion: session.boardVersion, diagram: session.diagram };
   }
 
   function find(req: Request, res: Response) {
@@ -80,6 +86,41 @@ export function createApp(config: Config, connect = connectRealtime) {
     return session.closing;
   }
 
+  function validObservation(result: Observation, snapshot: BoardSnapshot) {
+    const ids = new Set(snapshot.elements.map(element => element.id));
+    return [...result.nodes.flatMap(node => node.elementIds), ...result.edges.flatMap(edge => [...edge.elementIds, edge.fromElementId, edge.toElementId])]
+      .every(id => id === null || ids.has(id));
+  }
+  function updateInterviewer(session: Session) {
+    if (!session.call || !session.diagram) return;
+    const { snapshotVersion, nodes, edges, uncertainties } = session.diagram;
+    try { session.call.send({ type: 'session.update', session: { type: 'realtime', instructions: `${instructions}\n\nWhiteboard observer, snapshot v${snapshotVersion}: ${JSON.stringify({ nodes, edges, uncertainties })}\nUse this only as uncertain visual evidence. Ask a concise clarification when needed; never claim certainty beyond the observation.` } }); } catch { /* Voice control may close while an observation completes. */ }
+  }
+  async function observe(session: Session, snapshot: BoardSnapshot): Promise<void> {
+    session.observing = true;
+    try {
+      const visible = snapshot.elements.filter(element => !element.isDeleted);
+      const result: Observation = visible.length
+        ? { ...await observer(snapshot, session.abort.signal), snapshotVersion: snapshot.version, observedAt: new Date().toISOString() }
+        : { snapshotVersion: snapshot.version, observedAt: new Date().toISOString(), nodes: [], edges: [], changes: ['The board is blank.'], uncertainties: [] };
+      if (session.status === 'active' && session.boardVersion === snapshot.version && validObservation(result, snapshot)) {
+        session.diagram = result;
+        updateInterviewer(session);
+      }
+    } catch (error) {
+      if (!session.abort.signal.aborted) console.error(JSON.stringify({ sessionId: session.id, event: 'board.observer_failed', code: error instanceof Error ? error.name : 'unknown' }));
+    } finally {
+      session.observing = false;
+      const pending = session.pendingBoard;
+      session.pendingBoard = undefined;
+      if (pending && session.status === 'active' && pending.version === session.boardVersion) void observe(session, pending);
+    }
+  }
+  function queueObservation(session: Session, snapshot: BoardSnapshot) {
+    if (session.observing) { session.pendingBoard = snapshot; return; }
+    void observe(session, snapshot);
+  }
+
   app.get('/api/health', (_req, res) => res.json({ ok: true, configured: Boolean(config.apiKey) }));
   app.post('/api/sessions', (req, res) => {
     empty.parse(req.body);
@@ -95,7 +136,7 @@ export function createApp(config: Config, connect = connectRealtime) {
     const sessionHandle = randomBytes(32).toString('base64url');
     const session: Session = {
       id, handleHash: hash(sessionHandle), status: 'starting', createdAt: Date.now(), deadlineAt: null,
-      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(), boardVersion: 0, boards: new Map(),
+      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(), boardVersion: 0, boards: new Map(), observing: false,
       controller: createTurnController(event => {
         if (!session.call) throw new Error('Realtime call is not ready.');
         session.call.send(event);
@@ -181,10 +222,14 @@ export function createApp(config: Config, connect = connectRealtime) {
     if (png.length > 1_000_000 || !validPng) return res.status(400).json({ error: { code: 'board', message: 'Invalid board image.', retryable: false } });
     const fingerprint = createHash('sha256').update(JSON.stringify(input.elements)).update(png).digest('hex');
     const existing = session.boards.get(input.version);
-    if (existing && existing !== fingerprint) return res.status(409).json({ error: { code: 'version', message: 'Conflicting board version.', retryable: false } });
+    if (existing && existing.fingerprint !== fingerprint) return res.status(409).json({ error: { code: 'version', message: 'Conflicting board version.', retryable: false } });
     if (!existing && input.version <= session.boardVersion) return res.status(409).json({ error: { code: 'version', message: 'Board version is older than the saved scene.', retryable: false } });
     const result = existing ? 'duplicate' : 'accepted';
-    if (!existing) { session.boards.set(input.version, fingerprint); session.boardVersion = input.version; }
+    if (!existing) {
+      const snapshot = { version: input.version, elements: input.elements, pngBase64: input.pngBase64 };
+      session.boards.set(input.version, { fingerprint, snapshot }); session.boardVersion = input.version;
+      queueObservation(session, snapshot);
+    }
     res.status(202).json({ version: input.version, duplicate: result === 'duplicate' });
   });
   app.post('/api/sessions/:id/end', async (req, res) => {

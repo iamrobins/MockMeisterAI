@@ -9,7 +9,7 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   let options: ConnectOptions | undefined;
   let closes = 0;
   const commands: RealtimeClientEvent[] = [];
-  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async (_sdp, config) => {
+  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', workerModel: 'gpt-6-luna', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async (_sdp, config) => {
     options = config;
     return { answerSdp: 'v=0\r\n', send: e => commands.push(e), close: async () => { ++closes; } };
   });
@@ -65,7 +65,7 @@ test('End racing with provider setup closes the late call and never greets', asy
   const setupStarted = new Promise<void>(resolve => { started = resolve; });
   const setupPending = new Promise<void>(resolve => { finish = resolve; });
   let closes = 0;
-  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async () => {
+  const runtime = createApp({ apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', workerModel: 'gpt-6-luna', publicOrigin: 'http://localhost:3000', demoEnabled: true }, async () => {
     started!();
     await setupPending;
     return { answerSdp: 'v=0', send: () => assert.fail('Ended call must not speak'), close: async () => { ++closes; } };
@@ -86,4 +86,38 @@ test('End racing with provider setup closes the late call and never greets', asy
   finish!();
   assert.equal((await voice).status, 409);
   assert.equal(closes, 1);
+});
+
+test('observer discards stale work, processes the newest board, and clears a blank board', async t => {
+  let resolveFirst!: (value: { nodes: []; edges: []; changes: string[]; uncertainties: [] }) => void;
+  let calls = 0;
+  const commands: RealtimeClientEvent[] = [];
+  const first = new Promise<{ nodes: []; edges: []; changes: string[]; uncertainties: [] }>(resolve => { resolveFirst = resolve; });
+  const runtime = createApp({
+    apiKey: 'fixture-key', model: 'gpt-realtime-2.1-mini', workerModel: 'gpt-6-luna', publicOrigin: 'http://localhost:3000', demoEnabled: true,
+    observer: async snapshot => ++calls === 1 ? first : { nodes: [], edges: [], changes: [`v${snapshot.version}`], uncertainties: [] },
+  }, async () => ({ answerSdp: 'v=0', send: event => commands.push(event), close: async () => {} }));
+  const server = runtime.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(async () => { await runtime.close(); server.close(); server.closeAllConnections(); });
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { Origin: 'http://localhost:3000', 'Content-Type': 'application/json' };
+  const session = await (await fetch(base + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
+  const auth = { ...headers, 'X-Interview-Session': session.sessionHandle };
+  const path = `${base}/api/sessions/${session.sessionId}`;
+  await fetch(path + '/voice', { method: 'POST', headers: auth, body: JSON.stringify({ offerSdp: 'v=0\r\nm=audio 9' }) });
+  await fetch(path + '/heartbeat', { method: 'POST', headers: auth, body: JSON.stringify({ voiceConnected: true }) });
+  const png = Buffer.alloc(24); Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png); png.writeUInt32BE(0x49484452, 12); png.writeUInt32BE(40, 16); png.writeUInt32BE(40, 20);
+  const submit = (version: number, elements: unknown[]) => fetch(path + '/board', { method: 'POST', headers: auth, body: JSON.stringify({ version, capturedAt: new Date().toISOString(), elements, pngBase64: png.toString('base64') }) });
+  await submit(1, [{ id: 'cache', version: 1, versionNonce: 1 }]);
+  await submit(2, [{ id: 'database', version: 1, versionNonce: 1 }]);
+  resolveFirst({ nodes: [], edges: [], changes: ['stale'], uncertainties: [] });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  let state = await (await fetch(path, { headers: { 'X-Interview-Session': session.sessionHandle } })).json();
+  assert.equal(state.diagram.snapshotVersion, 2); assert.deepEqual(state.diagram.changes, ['v2']);
+  assert.ok(commands.some(event => event.type === 'session.update'));
+  await submit(3, []);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  state = await (await fetch(path, { headers: { 'X-Interview-Session': session.sessionHandle } })).json();
+  assert.equal(state.diagram.snapshotVersion, 3); assert.deepEqual(state.diagram.nodes, []); assert.equal(calls, 2);
 });
