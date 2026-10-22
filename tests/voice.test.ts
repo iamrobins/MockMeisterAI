@@ -71,17 +71,18 @@ test('generation completion does not release a response before playback finishes
   assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
 });
 
-test('an observer request speaks once the current audio is finished', () => {
+test('an observer request speaks once the current audio is finished with its own prompt', () => {
   const sent: RealtimeClientEvent[] = [];
   const voice = createTurnController(e => sent.push(e));
   voice.start();
   voice.accept(response('response.created', 'greeting'));
   voice.accept(event('output_audio_buffer.started', { response_id: 'greeting' }));
   voice.accept(response('response.done', 'greeting'));
-  voice.request();
+  voice.request('Ask about the cache.');
   assert.equal(sent.filter(e => e.type === 'response.create').length, 1);
   voice.accept(event('output_audio_buffer.stopped', { response_id: 'greeting' }));
   assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
+  assert.deepEqual(sent.at(-1), { type: 'response.create', response: { instructions: 'Ask about the cache.' } });
 });
 
 test('a duplicate commit does not request a second response after playback', () => {

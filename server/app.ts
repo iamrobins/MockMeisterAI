@@ -92,10 +92,13 @@ export function createApp(config: Config, connect = connectRealtime) {
     return [...result.nodes.flatMap(node => node.elementIds), ...result.edges.flatMap(edge => [...edge.elementIds, edge.fromElementId, edge.toElementId])]
       .every(id => id === null || ids.has(id));
   }
+  function observerInstructions(diagram: Observation) {
+    const { snapshotVersion, nodes, edges, uncertainties } = diagram;
+    return `${instructions}\n\nWhiteboard observer, snapshot v${snapshotVersion}: ${JSON.stringify({ nodes, edges, uncertainties })}\nUse this quietly as uncertain visual evidence. If needed, ask a concise technical clarification, not about board visibility or uploads.`;
+  }
   function updateInterviewer(session: Session) {
     if (!session.call || !session.diagram) return;
-    const { snapshotVersion, nodes, edges, uncertainties } = session.diagram;
-    try { session.call.send({ type: 'session.update', session: { type: 'realtime', instructions: `${instructions}\n\nWhiteboard observer, snapshot v${snapshotVersion}: ${JSON.stringify({ nodes, edges, uncertainties })}\nUse this quietly as uncertain visual evidence. If needed, ask a concise technical clarification, not about board visibility or uploads.` } }); } catch { /* Voice control may close while an observation completes. */ }
+    try { session.call.send({ type: 'session.update', session: { type: 'realtime', instructions: observerInstructions(session.diagram) } }); } catch { /* Voice control may close while an observation completes. */ }
   }
   async function observe(session: Session, snapshot: BoardSnapshot): Promise<void> {
     session.observing = true;
@@ -109,7 +112,7 @@ export function createApp(config: Config, connect = connectRealtime) {
           session.diagram = result;
           session.diagramStatus = 'ready';
           updateInterviewer(session);
-          if (visible.length) session.controller.request();
+          if (visible.length) session.controller.request(`${observerInstructions(result)}\n\nThis whiteboard update triggered this turn. Ask exactly one short, direct technical question about one concrete component or connection shown. Do not restart or introduce the challenge, re-ask baseline requirements, explain the design, answer the question yourself, or speak for the candidate.`);
         } else {
           session.diagramStatus = 'failed';
         }

@@ -89,6 +89,7 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
   let playing = false;
   let awaitingPlayback = false;
   let pending = false;
+  let pendingInstructions: string | undefined;
   let responseId: string | undefined;
   let cancelRequested = false;
   const cancelled = new Set<string>();
@@ -98,10 +99,12 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
   function schedule() {
     if (!ready || stopped || speaking || generating || playing || awaitingPlayback || !pending) return;
     pending = false;
+    const instructions = pendingInstructions;
+    pendingInstructions = undefined;
     generating = true;
     responseId = undefined;
     cancelRequested = false;
-    send({ type: 'response.create' });
+    send(instructions ? { type: 'response.create', response: { instructions } } : { type: 'response.create' });
   }
 
   function interrupt() {
@@ -121,9 +124,10 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
       pending = true;
       schedule();
     },
-    request() {
+    request(instructions?: string) {
       if (!ready || stopped) return;
       pending = true;
+      pendingInstructions = instructions;
       schedule();
     },
     stop() {
@@ -136,6 +140,7 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
       switch (event.type) {
         case 'input_audio_buffer.speech_started':
           speaking = true;
+          pendingInstructions = undefined;
           interrupt();
           break;
         case 'input_audio_buffer.speech_stopped':
@@ -145,6 +150,7 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
           if (committed.has(event.item_id)) break;
           committed.add(event.item_id);
           pending = true;
+          pendingInstructions = undefined;
           break;
         case 'response.created':
           responseId = event.response.id;
