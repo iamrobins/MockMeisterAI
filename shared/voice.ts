@@ -124,7 +124,7 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
     interruptTimer = setTimeout(() => {
       interruptTimer = undefined;
       if (speaking) interrupt();
-    }, 250);
+    }, 2_000);
   }
 
   return {

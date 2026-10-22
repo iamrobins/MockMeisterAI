@@ -42,13 +42,13 @@ test('server greets once, waits for commit and playback, and coalesces resumed s
   voice.accept(event('output_audio_buffer.started', { response_id: 'greeting' }));
   voice.accept(response('response.done', 'greeting'));
   voice.accept(event('input_audio_buffer.speech_started'));
-  await new Promise(resolve => setTimeout(resolve, 275));
+  await new Promise(resolve => setTimeout(resolve, 2_050));
   voice.accept(event('input_audio_buffer.speech_stopped'));
   voice.accept(event('input_audio_buffer.committed', { item_id: 'answer_1' }));
   assert.equal(sent.filter(e => e.type === 'response.create').length, 2);
   voice.accept(response('response.created', 'reply_1'));
   voice.accept(event('input_audio_buffer.speech_started'));
-  await new Promise(resolve => setTimeout(resolve, 275));
+  await new Promise(resolve => setTimeout(resolve, 2_050));
   assert.ok(sent.some(e => e.type === 'response.cancel'));
   assert.ok(sent.some(e => e.type === 'output_audio_buffer.clear'));
   voice.accept(response('response.done', 'reply_1', 'cancelled'));
@@ -109,7 +109,7 @@ test('confirmed interruption before response.created also cancels the late respo
   const voice = createTurnController(e => sent.push(e));
   voice.start();
   voice.accept(event('input_audio_buffer.speech_started'));
-  await new Promise(resolve => setTimeout(resolve, 275));
+  await new Promise(resolve => setTimeout(resolve, 2_050));
   voice.accept(event('input_audio_buffer.speech_stopped'));
   voice.accept(response('response.created', 'late_greeting'));
   voice.accept(event('output_audio_buffer.started', { response_id: 'late_greeting' }));
@@ -125,7 +125,7 @@ test('a brief VAD blip does not interrupt interviewer audio', async () => {
   voice.accept(event('output_audio_buffer.started', { response_id: 'reply_1' }));
   voice.accept(event('input_audio_buffer.speech_started'));
   voice.accept(event('input_audio_buffer.speech_stopped'));
-  await new Promise(resolve => setTimeout(resolve, 275));
+  await new Promise(resolve => setTimeout(resolve, 2_050));
   assert.equal(sent.some(e => e.type === 'response.cancel'), false);
   assert.equal(sent.some(e => e.type === 'output_audio_buffer.clear'), false);
 });
