@@ -17,6 +17,7 @@ export function App() {
   const [session, setSession] = useState<{ id: string; handle: string }>();
   const [boardReady, setBoardReady] = useState(false);
   const [boardStatus, setBoardStatus] = useState('');
+  const [headset, setHeadset] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -41,7 +42,7 @@ export function App() {
         ready() { setBoardReady(true); },
       });
       voice.current = call;
-      void call.start();
+      void call.start(headset);
     } catch {
       setNotice('This browser could not initialize audio. Try a current desktop browser on localhost or HTTPS.');
       setActive(false);
@@ -58,7 +59,7 @@ export function App() {
           {active ? <>
             <button aria-pressed={muted} onClick={() => { voice.current?.mute(!muted); setMuted(!muted); }}>{muted ? 'Unmute' : 'Mute'}</button>
             <button className="primary" onClick={() => { void voice.current?.end(); }}>End interview</button>
-          </> : <button className="primary" onClick={start}>Start interview</button>}
+          </> : <><button aria-pressed={headset} onClick={() => setHeadset(!headset)}>Headset: {headset ? 'On' : 'Off'}</button><button className="primary" onClick={start}>Start interview</button></>}
         </div>
       </header>
       <section className="brief">

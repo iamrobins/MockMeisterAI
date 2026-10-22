@@ -136,7 +136,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
     else maybeConnected();
   };
 
-  async function start() {
+  async function start(headset: boolean) {
     setupTimer = setTimeout(() => { void end('Connection setup timed out. Please try again.'); }, 30_000);
     window.addEventListener('pagehide', leave);
     try {
@@ -147,7 +147,7 @@ export function createVoice(container: HTMLElement, callbacks: Callbacks) {
       await playback.ready;
       if (closed) return;
       callbacks.status('Connecting…');
-      const session = await request<{ sessionId: string; sessionHandle: string }>('/api/sessions', {});
+      const session = await request<{ sessionId: string; sessionHandle: string }>('/api/sessions', { headset });
       sessionId = session.sessionId;
       handle = session.sessionHandle;
       callbacks.session(sessionId, handle);

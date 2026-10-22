@@ -12,6 +12,7 @@ export type VoiceCall = {
 export type ConnectOptions = {
   apiKey: string;
   model: string;
+  headset: boolean;
   signal: AbortSignal;
   onEvent: (event: RealtimeServerEvent) => void;
   onFailure: () => void;
@@ -29,9 +30,10 @@ export async function connectRealtime(offerSdp: string, options: ConnectOptions)
       max_output_tokens: 160,
       audio: {
         input: {
-          noise_reduction: { type: 'near_field' },
+          noise_reduction: { type: options.headset ? 'near_field' : 'far_field' },
           transcription: { model: 'gpt-4o-mini-transcribe', language: 'en' },
-          turn_detection: { type: 'server_vad', create_response: false, interrupt_response: false },
+          turn_detection: { type: 'server_vad', create_response: false, interrupt_response: false,
+            threshold: options.headset ? 0.5 : 0.65, silence_duration_ms: options.headset ? 500 : 700 },
         },
         output: { voice: 'cedar' },
       },

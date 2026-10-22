@@ -24,7 +24,7 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   }
   assert.equal((await post('/api/sessions', {}, undefined, 'https://other.example')).status, 403);
   assert.equal((await post('/api/sessions', { secret: 'unexpected' })).status, 400);
-  const created = await post('/api/sessions', {});
+  const created = await post('/api/sessions', { headset: true });
   assert.equal(created.status, 201);
   const { sessionId, sessionHandle } = await created.json();
   const path = `/api/sessions/${sessionId}`;
@@ -36,6 +36,7 @@ test('HTTP routes isolate sessions, control one call, and end it once', async t 
   assert.equal((await post(`${path}/voice`, { offerSdp: 'v=0\r\nm=audio 9' }, sessionHandle)).status, 409);
   await post(`${path}/heartbeat`, { voiceConnected: true }, sessionHandle);
   await post(`${path}/heartbeat`, { voiceConnected: true }, sessionHandle);
+  assert.equal(options!.headset, true);
   assert.deepEqual(commands.map(e => e.type), ['response.create']);
   const png = Buffer.alloc(24); Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png); png.writeUInt32BE(0x49484452, 12); png.writeUInt32BE(40, 16); png.writeUInt32BE(40, 20);
   const board = { version: 1, capturedAt: new Date().toISOString(), elements: [{ id: 'cache', version: 1, versionNonce: 1 }], pngBase64: png.toString('base64') };

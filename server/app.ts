@@ -22,12 +22,13 @@ type Session = {
   call?: VoiceCall;
   closing?: Promise<void>;
   error?: string;
+  headset: boolean;
   boardVersion: number;
   boardFingerprint?: string;
 };
 
 const hash = (value: string) => createHash('sha256').update(value).digest();
-const empty = z.object({}).strict();
+const sessionStart = z.object({ headset: z.boolean().default(false) }).strict();
 const offer = z.object({ offerSdp: z.string().max(65_536).startsWith('v=0').refine(sdp => sdp.includes('m=audio')) }).strict();
 const heartbeat = z.object({ voiceConnected: z.boolean() }).strict();
 const board = z.object({ version: z.number().int().positive(), capturedAt: z.string().datetime(), elements: z.array(z.object({ id: z.string().max(128), version: z.number().int(), versionNonce: z.number().int(), isDeleted: z.boolean().optional(), text: z.string().max(10_000).optional() }).passthrough()).max(500), pngBase64: z.string().max(1_400_000) }).strict();
@@ -82,7 +83,7 @@ export function createApp(config: Config, connect = connectRealtime) {
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, configured: Boolean(config.apiKey) }));
   app.post('/api/sessions', (req, res) => {
-    empty.parse(req.body);
+    const { headset } = sessionStart.parse(req.body);
     if (!config.demoEnabled || !config.apiKey) {
       res.status(503).json({ error: { code: 'setup', message: 'Interview start is unavailable. Check server configuration.', retryable: false } });
       return;
@@ -95,7 +96,7 @@ export function createApp(config: Config, connect = connectRealtime) {
     const sessionHandle = randomBytes(32).toString('base64url');
     const session: Session = {
       id, handleHash: hash(sessionHandle), status: 'starting', createdAt: Date.now(), deadlineAt: null,
-      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(), boardVersion: 0,
+      lastHeartbeat: Date.now(), attempted: false, abort: new AbortController(), headset, boardVersion: 0,
       controller: createTurnController(event => {
         if (!session.call) throw new Error('Realtime call is not ready.');
         session.call.send(event);
@@ -117,7 +118,7 @@ export function createApp(config: Config, connect = connectRealtime) {
     res.on('close', onDisconnect);
     try {
       const call = await connect(offerSdp, {
-        apiKey: config.apiKey, model: config.model, signal: session.abort.signal,
+        apiKey: config.apiKey, model: config.model, headset: session.headset, signal: session.abort.signal,
         onEvent(event) {
           session.controller.accept(event);
           if (event.type === 'error' && event.error.code !== 'response_cancel_not_active') {
