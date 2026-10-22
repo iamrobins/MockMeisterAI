@@ -4,7 +4,7 @@ Read [HLD](HLD.md) for scope and [LLD](LLD.md) for contracts. These documents de
 
 ## Rules for the implementation
 
-The app is named **MockMeister**. Use this spelling in the page title, visible app header, and project README. Build the core interview directly. Keep Excalidraw's UI. No login, signup, accounts, dashboard, question catalogue, custom drawing tools, agent framework, vector store, or extra services. Keep one root package, one React client, one Node server, and PostgreSQL. Three model roles are enough; the orchestrator is ordinary TypeScript.
+The app is named **MockMeister**. Use this spelling in the page title, visible app header, and project README. Build the core interview directly. Keep Excalidraw's UI. No login, signup, accounts, dashboard, question catalogue, custom drawing tools, agent framework, vector store, or extra services. Keep one root package, one React client, one Node server, and PostgreSQL. The Realtime interviewer and evaluator are enough; the orchestrator is ordinary TypeScript.
 
 Implement the milestones in order. Each milestone ends with an observable working slice and a short verification note. Do not generate an entire application full of stubbed services. Use real provider integration as soon as the voice slice is ready; fixtures are for focused checks, not a fake hiring-manager demo.
 
@@ -18,7 +18,7 @@ This comes first because audio playback, interruption, and provider account acce
 - Use a demo Microsoft Rocketbox GLB from the selected Talking Avatar project, locally served as `/avatars/interviewer.glb`. Obtain the character file separately if it is not included in the npm package. Bundle the package's `viseme-model.bin` and explicitly pass its local `modelUrl`. Preserve the asset's provenance and license/attribution notices. Do not use the vendor's hosted avatar product.
 - Connect the remote audio stream to the avatar as the sole playback owner. Add the plain-audio failure fallback.
 - Prove server-controlled response creation, finalized transcripts, provider call termination, playback lifecycle, and barge-in. Check both provider buffering and the avatar's additional playback delay.
-- Lock compatible versions and record the exact model/event contract that passed. Set `WORKER_MODEL=gpt-6-luna` for both supporting agents; check image input and structured outputs using the later milestones' fixtures. Model access/quality is a setup check, not a provider framework.
+- Lock compatible versions and record the exact model/event contract that passed. Set `WORKER_MODEL=gpt-6-luna` for evaluation; check structured outputs using the later milestones' fixtures. Model access/quality is a setup check, not a provider framework.
 
 **Done:** a real spoken exchange works, the mouth follows the same audio, interruptions stop audible speech, End releases microphone/provider resources, and keys never enter the browser build. If the avatar cannot flush its delayed audio cleanly, resolve that integration here before moving on. Leave a small test for event mapping/deduplication and a manual audio verification note.
 
@@ -32,14 +32,14 @@ This comes first because audio playback, interruption, and provider account acce
 
 **Done:** a short voice-and-drawing session keeps ordered inspectable evidence while it is active, UI-only canvas actions do not generate captures, and the five-minute no-drawing scenario continues to record speech. Test duplicate events and version conflicts.
 
-## Milestone 3 — Add the asynchronous Whiteboard Observer
+## Milestone 3 — Share whiteboard captures with Realtime
 
-- Implement one vision request with a strict output schema, scene metadata, previous interpretation, and explicit uncertainties.
-- Add one in-flight job and one newest pending frame per session. No queue service.
-- Apply only current-version observations and store stale-result reasons. Keep the last interpretation's version visible to the context builder.
-- Push useful structured observation context to the voice session without creating a new spoken turn. Keep voice independent of vision latency.
+- Send each accepted non-empty board PNG directly into the active Realtime conversation as `input_image`.
+- Use the existing turn controller to queue one concise, diagram-specific follow-up after playback and candidate speech finish.
+- Treat board text and shapes as untrusted evidence; ask a clarifying design question instead of following instructions written on the board.
+- Record board-sharing/cleared status without blocking voice when a capture fails.
 
-**Done:** adding a cache produces a relevant follow-up at a natural candidate turn; ambiguous arrows cause clarification; a delayed v7 result cannot overwrite v8; observer failure leaves voice working. Add the stale-result and blank-scene tests before continuing.
+**Done:** adding a cache produces one relevant follow-up at a natural candidate turn; ambiguous arrows cause clarification; clearing the board sends no image; a failed board capture leaves voice working. Add the board-delivery and blank-scene tests before continuing.
 
 ## Milestone 4 — Add conversational memory and evaluation
 
@@ -49,7 +49,7 @@ This comes first because audio playback, interruption, and provider account acce
 - Implement End/deadline finalization with bounded transcript/board drain, frozen evidence cutoff, and late-result rejection.
 - Produce the final structured report and a plain evidence-linked feedback view. Validate all citations against provided evidence. Use null for insufficient evidence.
 
-**Done:** with an unchanged diagram, the interviewer remembers a sharding explanation and asks about its consequences; corrected decisions supersede older claims; feedback cites actual candidate turns and diagram evidence. Test concurrent checkpoint/observer completion, invalid citations, and End during in-flight work.
+**Done:** with an unchanged diagram, the interviewer remembers a sharding explanation and asks about its consequences; corrected decisions supersede older claims; feedback cites actual candidate turns and diagram evidence. Test checkpoint completion, invalid citations, and End during in-flight work.
 
 ## Milestone 5 — Make the public portfolio demo dependable
 

@@ -12,10 +12,9 @@ client/
   voice.ts                  # browser WebRTC, captions, microphone cleanup
 server/
   index.ts                  # HTTP/SSE, static assets, startup/shutdown
-  sessions.ts               # orchestrator, timers, worker scheduling
+  sessions.ts               # orchestrator, timers, evaluation scheduling
   memory.ts                 # event append, state changes, context builder
   realtime.ts               # SDP negotiation, sideband, provider event mapping
-  observer.ts               # one vision request and validation
   evaluator.ts              # checkpoint and final evaluation requests
   db.ts                     # pg pool and narrowly scoped SQL functions
   challenge.ts              # URL-shortener brief, phase instructions, rubric
@@ -32,7 +31,7 @@ docs/
 
 Keep orchestration in functions and a `Map<sessionId, RuntimeSession>`. No base-agent class, generic event bus, repositories around SQL, or configurable workflow engine. Create the files when their milestone needs them.
 
-Model defaults: `REALTIME_MODEL=gpt-realtime-2.1-mini` and `WORKER_MODEL=gpt-6-luna`. Both supporting agents use Luna through the same OpenAI Responses client; voice uses OpenAI Realtime. No external STT/TTS, avatar API, or agent framework. Keep `ws` for the authenticated provider sideband, `pg` for PostgreSQL, and Zod for the existing validated contracts; do not replace these with more handwritten infrastructure merely to reduce the package count.
+Model defaults: `REALTIME_MODEL=gpt-realtime-2.1-mini` and `WORKER_MODEL=gpt-6-luna`. The evaluator uses Luna through the OpenAI Responses client; voice uses OpenAI Realtime. No external STT/TTS, avatar API, or agent framework. Keep `ws` for the authenticated provider sideband, `pg` for PostgreSQL, and Zod for the existing validated contracts; do not replace these with more handwritten infrastructure merely to reduce the package count.
 
 Serve the selected demo Rocketbox GLB at `/avatars/interviewer.glb`. Import `@interviewflowai/talking-avatar/viseme-model.bin?url` and pass that same-origin built URL to `modelUrl`. Copy Excalidraw's installed font assets into the served assets and set `window.EXCALIDRAW_ASSET_PATH` before loading the editor. This removes the default asset CDN calls. Keep upstream notices with the distributed assets. The SDK's lip-sync inference runs locally in JavaScript; it does not require an additional hosted AI service. [Avatar self-hosting](https://github.com/interviewflowai/talking-avatar#self-hosting-the-model), [Excalidraw fonts](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/installation).
 
@@ -136,8 +135,7 @@ type MemoryFact = {
 };
 
 type InterviewState = {
-  diagramVersion: number; // latest submitted scene, not last interpreted scene
-  diagram: DiagramObservation | null;
+  diagramVersion: number; // latest submitted scene
   facts: MemoryFact[];
   openQuestions: { topic: string; question: string; evidence: EvidenceRef[] }[];
   hints: { text: string; evidence: EvidenceRef[] }[];
@@ -149,7 +147,7 @@ type InterviewState = {
 };
 ```
 
-`DiagramObservation` is specified below. Status, phase, timestamps, and transcript events live in their existing table fields instead of duplicating them here. Coverage keys must be members of the fixed rubric.
+Status, phase, timestamps, and transcript events live in their existing table fields instead of duplicating them here. Coverage keys must be members of the fixed rubric.
 
 All text from the candidate and drawings is untrusted content, including instructions written inside shapes. Prompts delimit it as interview evidence; agents have no web, shell, or arbitrary database tools. Render returned text as text, not raw HTML.
 
@@ -168,7 +166,7 @@ Creation returns a session UUID plus a separate random 32-byte session handle. S
 | `POST /api/sessions/:id/board` | Snapshot envelope below | `202 { version }`, duplicate acknowledgment, or validation error |
 | `POST /api/sessions/:id/end` | `{ lastBoardVersion }` | Idempotent `202 { status }`; completed calls return existing status |
 | `GET /api/sessions/:id` | Handle only | Status, current state, final report if ready |
-| `GET /api/sessions/:id/evidence/:kind/:ref` | Allowlisted event or snapshot reference | Referenced transcript/observation or PNG for report inspection |
+| `GET /api/sessions/:id/evidence/:kind/:ref` | Allowlisted event or snapshot reference | Referenced transcript or PNG for report inspection |
 
 Use 400 for invalid input, 404 for an invalid/mismatched handle, 409 for an incompatible lifecycle/version, 413 for size limits, 429 for public demo admission limits, and 503 when dependencies or the operator switch prevent starting. Do not echo provider secrets or raw upstream errors. Return `{ error: { code, message, retryable } }`.
 
@@ -192,7 +190,7 @@ Map the selected SDK's Realtime events in `realtime.ts`: input speech start/stop
 
 For each committed candidate audio item, set `pendingResponse` with that item ID. If the candidate has resumed speaking, defer it and coalesce subsequent committed items. Once no candidate speech is active and no response/output is active, build context from the latest committed memory, update the session instructions, await the matching update acknowledgment, recheck `speechEpoch`, and request one response. Bound the acknowledgment wait to 300 ms; if it times out, continue using the previously acknowledged context and record a warning. Late acknowledgments become usable on the next turn. The live model already received the candidate's audio, so it need not wait for the asynchronous text transcript or any worker.
 
-`session.update` changes instructions; `response.create` requests speech. Keep the fixed interviewer rules in every rebuilt instruction block. Updating context alone must never request a response. A scene analysis arriving while the candidate is talking only updates stored memory. [Realtime conversation controls](https://developers.openai.com/api/docs/guides/realtime-conversations).
+`session.update` changes instructions; `response.create` requests speech. Keep the fixed interviewer rules in every rebuilt instruction block. Updating context alone must never request a response. A board image arriving while the candidate is talking is queued for a later diagram-specific follow-up. [Realtime conversation controls](https://developers.openai.com/api/docs/guides/realtime-conversations).
 
 On candidate speech start, invalidate any pending response setup using `speechEpoch`, cancel current generation, and clear the provider output buffer. The browser also detaches avatar stream playback immediately to discard its additional delayed sound; reattach on the next valid output-playback start, or switch to the plain audio fallback if the SDK cannot flush cleanly. In the integration spike verify the provider's played-audio truncation and output events; `response.done` alone does not mean playback finished. Store interrupted assistant output as `interrupted`, not as fully heard evidence. Do not count an unplayed hint or unheard question in evaluation; conservatively exclude interrupted interviewer turns until playback-range tracking is proven.
 
@@ -200,7 +198,7 @@ Persist finalized transcripts once per provider item ID, allowing transcription 
 
 No tool calls are needed for the first version: the evaluator extracts durable decisions and hints asynchronously from transcript evidence. This avoids a fourth summarization model and a function call on every spoken turn.
 
-## 7. Excalidraw capture and observer
+## 7. Excalidraw capture and Realtime sharing
 
 Use the editor's `onChange` callback, scene element IDs/bindings, and export utilities. Native text and arrow bindings are evidence that complements vision; geometry alone does not establish architectural meaning. [Change callback](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/api/props/), [image exports](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/api/utils/export).
 
@@ -220,37 +218,17 @@ type BoardSubmission = {
   pngBase64: string;
 };
 
-type DiagramObservation = {
-  snapshotVersion: number;
-  observedAt: string; // server assigned after acceptance
-  nodes: { elementIds: string[]; label: string; confidence: 'low' | 'medium' | 'high' }[];
-  edges: {
-    elementIds: string[];
-    fromElementId: string | null;
-    toElementId: string | null;
-    direction: 'forward' | 'bidirectional' | 'unclear';
-    label: string | null;
-  }[];
-  changes: string[];
-  uncertainties: string[];
-};
 ```
 
-Server limits: 3 MB serialized board request, 1 MB decoded PNG, dimensions at most 1600×1600, 500 elements, bounded text fields, and positive monotonically increasing versions. Compute a server hash over canonical scene data and image bytes. Same version and same hash is an idempotent retry; same version and different data is a conflict. Older versions are rejected. Validate PNG signature/header dimensions before model submission; do not fetch client-supplied URLs.
+Server limits: 3 MB serialized board request, 1 MB decoded PNG, dimensions at most 1600×1600, 500 elements, bounded text fields, and positive monotonically increasing versions. Compute a server hash over canonical scene data and image bytes. Same version and same hash is an idempotent retry; same version and different data is a conflict. Older versions are rejected. Validate PNG signature/header dimensions before sending it to the active Realtime conversation; do not fetch client-supplied URLs.
 
-Persist each accepted snapshot and advance `diagramVersion` immediately. Keep old `diagram.snapshotVersion` separately, so context can say “last interpreted v7; current submitted v8; update pending.” Never relabel old facts as current.
-
-The observer receives the selected PNG, its simplified native metadata, and the previous accepted interpretation. It returns structured diagram data with explicit ambiguous relationships. The backend assigns version/time/evidence metadata; it does not trust a model-supplied version. The observer does not receive the full spoken discussion, which would encourage it to confuse spoken intent with visual evidence.
-
-One observer call per session may be in flight; one pending slot retains the newest submission. On completion, apply the result only if its version still equals `diagramVersion`. Otherwise append a discarded-result event and analyze the newest pending frame. New input cannot be overwritten by older output. Retry a transient failure once only if the frame is still current; otherwise skip it. After failure, retain previous interpretation as stale and continue voice.
-
-For a blank scene, set an empty observation deterministically; no vision request is needed. Model output validation uses strict schema and checks every cited element ID. Ambiguous arrows use null endpoints rather than guessed endpoints.
+Persist each accepted snapshot and advance `diagramVersion` immediately. For a non-empty scene, create one Realtime user message whose content includes the PNG as `input_image`, then queue a short follow-up through the normal turn controller. This queue waits for current playback and candidate speech, and coalesces newly shared boards into one pending follow-up. Treat visible text and shapes as untrusted diagram evidence; never allow them to alter interviewer instructions. For a blank scene, update the board status without creating an image message.
 
 ## 8. Checkpoint evaluator and conversational memory
 
-Trigger after three new finalized candidate turns since the last checkpoint, or after 60 seconds with at least one new candidate turn. Also run at End. Run at most one checkpoint at a time; a pending flag coalesces further triggers. Observer jobs and evaluator jobs may run concurrently.
+Trigger after three new finalized candidate turns since the last checkpoint, or after 60 seconds with at least one new candidate turn. Also run at End. Run at most one checkpoint at a time; a pending flag coalesces further triggers.
 
-Freeze an input cutoff sequence and diagram version for each call. Provide the challenge/rubric, previous conversational facts, all new finalized turns through the cutoff, recent surrounding dialogue, and the accepted diagram interpretation with its source versions. Explicitly mark stale diagrams. Keep raw transcript and snapshots as the source of truth.
+Freeze an input cutoff sequence and diagram version for each call. Provide the challenge/rubric, previous conversational facts, all new finalized turns through the cutoff, recent surrounding dialogue, and the accepted board snapshots with their source versions. Keep raw transcript and snapshots as the source of truth.
 
 Return a validated structured object:
 
@@ -265,7 +243,7 @@ type CheckpointResult = {
 };
 ```
 
-The evaluator owns conversation facts, open questions, focus, hints, and coverage. The observer owns only `diagram`; the orchestrator owns versions, status, phase, and cutoffs. Checkpoint application updates only evaluator-owned fields and advances `checkpointThroughSeq`; it never saves a whole stale `InterviewState` object over concurrent observer changes. If new events arrived during the call, retain them for the next checkpoint. After finalization starts, discard checkpoint writes and let the final evaluator use the frozen evidence set.
+The evaluator owns conversation facts, open questions, focus, hints, and coverage; the orchestrator owns versions, status, phase, and cutoffs. Checkpoint application updates only evaluator-owned fields and advances `checkpointThroughSeq`; it never saves a whole stale `InterviewState` object over newer board submissions. If new events arrived during the call, retain them for the next checkpoint. After finalization starts, discard checkpoint writes and let the final evaluator use the frozen evidence set.
 
 Keep the facts small: at most 30 active facts, with older/corrected facts still available in event history. Preserve supported unresolved tradeoffs ahead of generic summaries. Never collapse “candidate claims replication exists” into “diagram shows replicas.”
 
@@ -273,7 +251,7 @@ Use structured model outputs and local schema/citation validation. Treat refusal
 
 ## 9. Next-response context
 
-`buildContext(state, phase)` is deterministic. Prioritize phase/time remaining, current focus, matching topic facts, unresolved questions, hints already given, and diagram changes/freshness. Use at most 6000 characters of dynamic context; preserve uncertainty and source labels when trimming. The voice model keeps its own live dialogue; this context supplies shared updates rather than repeating the entire transcript.
+`buildContext(state, phase)` is deterministic. Prioritize phase/time remaining, current focus, matching topic facts, unresolved questions, and hints already given. Use at most 6000 characters of dynamic context; preserve uncertainty and source labels when trimming. The voice model keeps its own live dialogue; this context supplies shared updates rather than repeating the entire transcript.
 
 Example application-generated context:
 
@@ -282,8 +260,7 @@ Phase: tradeoffs. Time remaining: 03:20.
 Focus: database partitioning.
 Candidate stated [event:42]: shard mappings by user_id; redirect lookup impact unresolved.
 Candidate stated [event:45]: monitor traffic skew; mitigation not yet explained.
-Diagram: interpreted v7, current submitted v7. Database node db-1 present.
-Uncertainty: arrow between cache-1 and db-1 has unclear direction.
+Latest board shared: v7.
 Open question: how does redirect lookup find the right shard from a short code?
 Hint already heard [event:39]: compare read and write paths.
 ```
@@ -294,9 +271,9 @@ Instructions tell the interviewer to ask one concise question, prefer clarificat
 
 On End, the browser freezes editing, uploads the latest stable scene immediately, waits for its acknowledgment up to three seconds, then sends End with `lastBoardVersion`. If upload fails, End still succeeds and explicitly records the missing final frame. Send `session.ending` three seconds before the deadline to request this last capture; the server still enters finalization at the hard deadline without depending on browser cooperation. A missing/unacknowledged final frame becomes a limitation.
 
-Entering `finalizing` is atomic and idempotent. Stop scheduling spoken responses. Ask the browser to stop microphone tracks and flush local playback; cancel current provider output. Allow up to three seconds for already committed transcription events, and up to ten seconds for observation of the frozen final board version. Reject later drawing submissions. Record missing pieces; freeze `finalEvidenceThroughSeq` after this drain, then close the browser peer and server/provider call using the verified Realtime close/hangup mechanism. Closing a server observer socket alone must not leave a browser call alive.
+Entering `finalizing` is atomic and idempotent. Stop scheduling spoken responses. Ask the browser to stop microphone tracks and flush local playback; cancel current provider output. Allow up to three seconds for already committed transcription events and the final board-upload acknowledgment. Reject later drawing submissions. Record missing pieces; freeze `finalEvidenceThroughSeq` after this drain, then close the browser peer and server/provider call using the verified Realtime close/hangup mechanism.
 
-The final evaluator gets all available ordered finalized transcript for this bounded ten-minute session, accepted diagram observations, challenge, hints, and rubric. Include at most four frame images: the latest frame plus up to three earlier frames cited by meaningful accepted changes. Only supplied observations/frames may be cited. It must not depend solely on a possibly stale checkpoint summary. Cite source turns/frames for all assessments; earlier designs that were replaced are historical context, not current design defects.
+The final evaluator gets all available ordered finalized transcript for this bounded ten-minute session, accepted board snapshots, challenge, hints, and rubric. Include at most four frame images: the latest frame plus up to three earlier frames cited by meaningful accepted changes. Only supplied frames may be cited. It must not depend solely on a possibly stale checkpoint summary. Cite source turns/frames for all assessments; earlier designs that were replaced are historical context, not current design defects.
 
 Fixed rubric dimensions: requirements, API/data model, request flow, scale/performance, reliability/tradeoffs, and communication. Each dimension uses score `1..4` or `null` for insufficient evidence. A score of 1 requires observed incorrect/unsupported reasoning; silence alone results in null. Distinguish work done after a hint from independent reasoning.
 
@@ -326,7 +303,6 @@ Each dimension appears once. Validate positive/negative assessment citations aga
 | Microphone denied / autoplay blocked | Explain the browser issue and allow retry; stop partially acquired resources |
 | Avatar/model asset fails | Dispose broken renderer, attach the same audio to one plain audio element |
 | Plain audio playback fails | End the interview with a clear error; only autoplay denial offers an explicit Enable sound action |
-| Observer timeout | Ten-second request timeout, one transient retry if current; keep speaking |
 | Checkpoint timeout | Twenty-second timeout, one transient retry; keep recent transcript and prior memory |
 | Final evaluation timeout | Thirty-second timeout per attempt; one retry; show explicit unavailable result |
 | Provider 401/403 or invalid model | Fail setup/call; do not retry as a network issue |
@@ -344,9 +320,9 @@ Log only session ID, event kind/sequence, snapshot version, duration, retry/disc
 
 | Check | Expected result |
 |---|---|
-| v7 observer returns after v8 submission | v7 never becomes current; context marks pending v8 |
+| Board v7 is shared while the candidate is speaking | One board-specific question waits for a natural turn boundary |
 | Five minutes of speech with no drawing | Transcript grows; checkpoint adds sharding decision and hot-partition risk |
-| Checkpoint finishes after newer observer | Conversational fields update; diagram stays at its newer accepted version |
+| Checkpoint finishes after a newer board submission | Conversational fields update without overwriting the newer board version |
 | Input transcript arrives after later provider events | Turn reconstruction uses item links, with missing links flagged |
 | Duplicate frame/turn/End | One accepted record and one final report |
 | Candidate corrects a decision | Both source statements retained; active fact supersedes earlier fact |
