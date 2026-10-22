@@ -121,6 +121,11 @@ export function createTurnController(send: (event: RealtimeClientEvent) => void)
       pending = true;
       schedule();
     },
+    request() {
+      if (!ready || stopped) return;
+      pending = true;
+      schedule();
+    },
     stop() {
       if (stopped) return;
       stopped = true;

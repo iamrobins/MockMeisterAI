@@ -109,6 +109,7 @@ export function createApp(config: Config, connect = connectRealtime) {
           session.diagram = result;
           session.diagramStatus = 'ready';
           updateInterviewer(session);
+          if (visible.length) session.controller.request();
         } else {
           session.diagramStatus = 'failed';
         }
